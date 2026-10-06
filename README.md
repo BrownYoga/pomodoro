@@ -77,8 +77,12 @@ create live accounts or send real emails.
 ## Cross-device sync
 
 Use the same account on your PC and phone. Start, pause, resume, reset, session
-selection, settings, and completed focus counts are shared. Visible devices poll
-every three seconds and refresh when focused or brought online. A saved finish
+selection, settings, and completed focus counts are saved to your account. Signing
+in or reloading fetches the saved timer; control actions send updates. There is
+no automatic polling, focus-triggered fetching, or realtime subscription. A device
+already open keeps its local countdown until it reloads or sends an action. If
+another device changed the timer, a stale action loads the latest state and asks
+you to try the action again. A saved finish
 timestamp keeps the countdown correct after reloads or closing the app, even if
 the devices have different system clocks. The next session waits for Start.
 Expired sessions are reconciled by the server once, without a background worker.
@@ -88,7 +92,9 @@ server and chooses the database row from the verified user ID. POST requests
 require a matching Origin and JSON content type. SQL queries use parameters;
 revision checks reject stale writes rather than overwriting another device.
 An offline device keeps displaying the countdown but cannot save control actions.
-There is no offline action queue; the sync message explains connection failures.
+There is no offline action queue or automatic retry; retry a failed action yourself,
+or reload if the initial account load failed. Timer completion makes no API call;
+the server resolves the saved deadline on the next load or action.
 
 `@netlify/database` and the SQL migration under `netlify/database/migrations`
 allow Netlify to provision the database and apply the schema during deployment.
@@ -117,7 +123,7 @@ and R resets; shortcuts do not intercept typing or button activation.
 - `src/composables/usePomodoro.ts`: reactive state, lifecycle, and clock scheduling.
 - `src/composables/useSettings.ts`: browser storage boundary.
 - `src/composables/useAuth.ts`: Netlify Identity session and authentication boundary.
-- `src/composables/useTimerSync.ts`: account polling, commands, conflicts, and clock alignment.
+- `src/composables/useTimerSync.ts`: account loading, commands, conflicts, and clock alignment.
 - `netlify/functions/timer.ts`: authenticated API with conditional Postgres updates.
 - `netlify/database/migrations`: versioned Postgres schema.
 - `src/composables/useCompletionSound.ts`: optional browser audio boundary.

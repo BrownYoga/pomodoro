@@ -47,17 +47,21 @@ describe('timer synchronization lifecycle', () => {
     expect(timer.remainingSeconds.value).toBe(62)
     expect(sync.disabled.value).toBe(false)
   })
-  it('loads account state, polls, and stops polling on logout', async () => {
+  it('loads account state once without timer, focus, visibility, or online polling', async () => {
     user.value = { id: 'ash' }
     await setup()
     expect(timer.remainingSeconds.value).toBe(1500)
-    expect(sync.message.value).toBe('Synced across your devices')
-    await vi.advanceTimersByTimeAsync(3000)
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(sync.message.value).toBe('Account timer loaded')
+    await vi.advanceTimersByTimeAsync(3600000)
+    window.dispatchEvent(new Event('focus'))
+    window.dispatchEvent(new Event('online'))
+    document.dispatchEvent(new Event('visibilitychange'))
+    await flushPromises()
+    expect(fetchMock).toHaveBeenCalledOnce()
     user.value = null
     await flushPromises()
     await vi.advanceTimersByTimeAsync(6000)
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock).toHaveBeenCalledOnce()
     expect(sync.message.value).toBe('')
   })
   it('submits commands with the last server revision and reconciles conflicts', async () => {
@@ -70,44 +74,42 @@ describe('timer synchronization lifecycle', () => {
     expect(sync.message.value).toContain('another device')
     expect(timer.status.value).toBe('ready')
   })
-  it('keeps controls enabled during background polling', async () => {
+  it('keeps controls enabled while a loaded account timer counts down locally', async () => {
     user.value = { id: 'ash' }
     await setup()
-    let finishPoll!: (response: Response) => void
-    fetchMock.mockImplementationOnce(() => new Promise<Response>(resolve => { finishPoll = resolve }))
+    timer.start()
     await vi.advanceTimersByTimeAsync(3000)
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(sync.busy.value).toBe(false)
+    expect(sync.disabled.value).toBe(false)
+    expect(timer.remainingSeconds.value).toBe(1497)
+  })
+  it('sends one command per action and prevents duplicate requests while saving', async () => {
+    user.value = { id: 'ash' }
+    await setup()
+    let finishSave!: (response: Response) => void
+    fetchMock.mockImplementationOnce(() => new Promise<Response>(resolve => { finishSave = resolve }))
+    const saving = sync.request({ type: 'reset' })
+    expect(sync.disabled.value).toBe(true)
+    expect(await sync.request({ type: 'reset' })).toBe(false)
     expect(fetchMock).toHaveBeenCalledTimes(2)
-    expect(sync.busy.value).toBe(false)
-    expect(sync.disabled.value).toBe(false)
-    finishPoll(response())
-    await flushPromises()
-    expect(sync.disabled.value).toBe(false)
-  })
-  it('prioritizes a button press and ignores a late response from the cancelled poll', async () => {
-    user.value = { id: 'ash' }
-    await setup()
-    let finishPoll!: (response: Response) => void
-    fetchMock.mockImplementationOnce(() => new Promise<Response>(resolve => { finishPoll = resolve }))
-    await vi.advanceTimersByTimeAsync(3000)
-    fetchMock.mockResolvedValueOnce(response(1))
-    expect(await sync.request({ type: 'reset' })).toBe(true)
-    expect(fetchMock.mock.calls[1]![1].signal.aborted).toBe(true)
-    expect(JSON.parse(fetchMock.mock.calls[2]![1].body)).toEqual({ revision: 0, command: { type: 'reset' } })
-    finishPoll(response(99))
-    await flushPromises()
-    expect(save).toHaveBeenCalledTimes(2)
+    expect(JSON.parse(fetchMock.mock.calls[1]![1].body)).toEqual({ revision: 0, command: { type: 'reset' } })
+    finishSave(response(1))
+    expect(await saving).toBe(true)
     expect(sync.busy.value).toBe(false)
     expect(sync.disabled.value).toBe(false)
   })
-  it('shows offline errors, retains the countdown, and recovers on the next poll', async () => {
+  it('reports offline failures without automatic retries and allows a manual retry', async () => {
     user.value = { id: 'ash' }
     await setup()
     fetchMock.mockRejectedValueOnce(new Error('offline'))
     expect(await sync.request({ type: 'start' })).toBe(false)
-    expect(sync.message.value).toContain('Could not sync')
+    expect(sync.message.value).toContain('Could not save')
     expect(timer.status.value).toBe('ready')
-    await vi.advanceTimersByTimeAsync(3000)
-    expect(sync.message.value).toBe('Synced across your devices')
+    await vi.advanceTimersByTimeAsync(60000)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(await sync.request({ type: 'start' })).toBe(true)
+    expect(sync.message.value).toBe('Timer saved to your account')
   })
   it('ignores a late response after signing out', async () => {
     let resolve!: (response: Response) => void
@@ -125,7 +127,7 @@ describe('timer synchronization lifecycle', () => {
     user.value = { id: 'ash' }
     fetchMock.mockResolvedValueOnce(new Response('{"state":{}}'))
     await setup()
-    expect(sync.message.value).toContain('Could not sync')
+    expect(sync.message.value).toContain('Could not load')
     expect(timer.remainingSeconds.value).toBe(65)
     wrapper!.unmount()
     wrapper = undefined

@@ -1,4 +1,4 @@
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import type { Ref } from 'vue'
 import type { User } from '@netlify/identity'
 import type { usePomodoro } from './usePomodoro'
@@ -13,21 +13,13 @@ export function useTimerSync(user: Ref<User | null>, timer: ReturnType<typeof us
   const disabled = computed(() => !!user.value && (!ready.value || busy.value))
   let revision = -1
   let generation = 0
-  let requestSequence = 0
   let inFlight = false
   let controller: AbortController | undefined
-  let interval: ReturnType<typeof setInterval> | undefined
 
   async function request(command?: TimerCommand) {
-    if (!user.value || (command && !ready.value)) return false
-    if (inFlight) {
-      if (!command || busy.value) return false
-      // A control action takes priority over a background read.
-      controller?.abort()
-    }
+    if (!user.value || inFlight || (command && !ready.value)) return false
     const accountGeneration = generation
-    const sequence = ++requestSequence
-    const isCurrent = () => accountGeneration === generation && sequence === requestSequence
+    const isCurrent = () => accountGeneration === generation
     const startedAt = Date.now()
     const activeController = new AbortController()
     controller = activeController
@@ -52,13 +44,16 @@ export function useTimerSync(user: Ref<User | null>, timer: ReturnType<typeof us
         revision = data.revision
       }
       ready.value = true
-      message.value = response.status === 409 ? 'The timer changed on another device. Updated here; try your action again.' : 'Synced across your devices'
+      message.value = response.status === 409
+        ? 'The timer changed on another device. Updated here; try your action again.'
+        : command ? 'Timer saved to your account' : 'Account timer loaded'
       return response.ok
     } catch (error) {
       if (isCurrent()) {
         message.value = error instanceof Error && error.message === 'session'
           ? 'Your session expired. Sign out and sign in again to sync.'
-          : 'Could not sync. Checking again shortly. Changes need a connection.'
+          : command ? 'Could not save your timer. Check your connection and try your action again.'
+            : 'Could not load your timer. Check your connection and reload to try again.'
       }
       return false
     } finally {
@@ -67,7 +62,6 @@ export function useTimerSync(user: Ref<User | null>, timer: ReturnType<typeof us
     }
   }
 
-  function poll() { if (document.visibilityState !== 'hidden') void request() }
   watch(() => user.value?.id, () => {
     generation++
     controller?.abort()
@@ -76,24 +70,11 @@ export function useTimerSync(user: Ref<User | null>, timer: ReturnType<typeof us
     ready.value = false
     revision = -1
     message.value = user.value ? 'Connecting your timer…' : ''
-    clearInterval(interval)
-    if (user.value) {
-      void request()
-      interval = setInterval(poll, 3000)
-    }
+    if (user.value) void request()
   }, { immediate: true })
-  onMounted(() => {
-    document.addEventListener('visibilitychange', poll)
-    window.addEventListener('focus', poll)
-    window.addEventListener('online', poll)
-  })
   onUnmounted(() => {
     generation++
     controller?.abort()
-    clearInterval(interval)
-    document.removeEventListener('visibilitychange', poll)
-    window.removeEventListener('focus', poll)
-    window.removeEventListener('online', poll)
   })
   return { message, busy, disabled, request }
 }
