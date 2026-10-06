@@ -21,6 +21,30 @@ test('lets the user start and pause using the controls', async ({ page }) => {
   await expect(page.getByTestId('start-button')).toBeEnabled()
 })
 
+test('shows Ready, Running, Paused, and Ready after reset', async ({ page }) => {
+  const status = page.getByTestId('timer-status')
+  const display = page.getByTestId('timer-display')
+
+  await expect(status).toHaveText('Ready')
+  const initialTime = await display.innerText()
+
+  await page.getByTestId('start-button').click()
+  await expect(status).toHaveText('Running')
+
+  // Pause before the first tick: the status must reflect the action,
+  // even though the remaining time is still the initial duration.
+  await page.getByTestId('pause-button').click()
+  await expect(status).toHaveText('Paused')
+  await expect(display).toHaveText(initialTime)
+  await page.clock.runFor(2000)
+  await expect(status).toHaveText('Paused')
+  await expect(display).toHaveText(initialTime)
+
+  await page.getByTestId('reset-button').click()
+  await expect(status).toHaveText('Ready')
+  await expect(display).toHaveText(initialTime)
+})
+
 test('counts down, pauses, resumes, and resets the displayed time', async ({ page }) => {
   const display = page.getByTestId('timer-display')
 
