@@ -8,18 +8,35 @@ import { decrementTime } from "../domain/timer";
 // Minimal contract only: the caller supplies the duration. No clock or state yet.
 export interface PomodoroTimer {
   remainingSeconds: Ref<number>;
+  isRunning: Ref<boolean>;
   start: () => void;
+  pause: () => void;
 }
 
 export function usePomodoro(durationSeconds: number): PomodoroTimer {
   const remainingSeconds = ref(durationSeconds);
+  const isRunning = ref(false);
+
+  let intervalId: ReturnType<typeof setInterval> | undefined;
+
   function start() {
-    setInterval(() => {
+    if (isRunning.value) return;
+    isRunning.value = true;
+    intervalId = setInterval(() => {
       remainingSeconds.value = decrementTime(remainingSeconds.value, 1);
     }, 1000);
   }
+
+  function pause() {
+    clearInterval(intervalId);
+    intervalId = undefined;
+    isRunning.value = false;
+  }
+
   return {
     remainingSeconds,
+    isRunning,
     start,
+    pause,
   };
 }
