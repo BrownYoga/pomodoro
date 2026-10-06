@@ -10,4 +10,10 @@ describe('TimerDisplay', () => {
     const wrapper = mount(TimerDisplay, { props: { value: '01:05' } })
     expect(wrapper.get('[data-testid="timer-display"]').text()).toBe('01:05')
   })
+
+  it('updates the displayed value when the prop changes', async () => {
+    const wrapper = mount(TimerDisplay, { props: { value: '01:05' } })
+    await wrapper.setProps({ value: '01:04' })
+    expect(wrapper.get('[data-testid="timer-display"]').text()).toBe('01:04')
+  })
 })

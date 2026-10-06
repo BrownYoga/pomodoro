@@ -1,43 +1,14 @@
-# Pomodoro learning project
+﻿# Pomodoro learning project
 
-Vue 3 + TypeScript + Vite with a TDD scaffold. The app is still blank;
-no countdown, controls, reactive timer state, or Pomodoro rules are implemented.
+Vue 3 + TypeScript + Vite, developed by making behaviour tests pass one at a time.
 
 ## Layers
 
-```text
-src/
-  domain/
-    timer.ts                       # Plain TypeScript timer utility contracts
-    pomodoro.ts                    # Placeholder for rules you will choose
-  composables/
-    usePomodoro.ts                 # Placeholder for Vue state and clock lifecycle
-  components/
-    TimerDisplay.vue               # Empty display component
-    TimerControls.vue              # Empty controls component
-  tests/
-    domain/
-      timer.test.ts
-      pomodoro.test.ts
-    composables/
-      usePomodoro.test.ts
-    components/
-      TimerDisplay.test.ts
-      TimerControls.test.ts
-e2e/
-  pomodoro.spec.ts
-vitest.config.ts
-playwright.config.ts
-```
-
-The domain owns calculations and rules, with no Vue or browser dependencies.
-The composable will call the domain and own `ref()` state, the clock, and
-start/pause/reset. Components will display values and emit actions; `App.vue`
-will connect them. E2E tests will exercise the assembled application.
-
-Durations, break sequence, completed-focus counting rules, and reset semantics
-are deliberately undecided. Session-rule and composable tests use `it.todo`
-until you define those contracts.
+- `src/domain`: pure TypeScript calculations and session rules, independent of Vue.
+- `src/composables`: Vue refs, clock lifecycle, and calls to domain functions.
+- `src/components`: display supplied values and emit control actions.
+- `src/tests`: runnable domain, composable, and component tests.
+- `e2e`: Playwright tests using `data-testid` selectors against the assembled UI.
 
 ## Commands
 
@@ -46,39 +17,80 @@ pnpm install
 pnpm dev
 pnpm build
 pnpm test                 # Vitest watch mode
-pnpm test:unit            # One Vitest run
-pnpm exec playwright install chromium  # Browser setup on each machine
-pnpm test:e2e             # Chromium E2E; starts Vite automatically on port 4173
-pnpm test:e2e:ui          # Interactive Playwright runner
+pnpm test:unit            # All unit/component tests once
+pnpm test:unit src/tests/composables/usePomodoro.test.ts
+pnpm exec playwright install chromium
+pnpm test:e2e             # Starts Vite automatically on port 4173
+pnpm test:e2e:ui
 ```
 
-Build and tests are independent: a failing test does not prevent building or
-running the app. Vitest only discovers `src/tests/**/*.test.ts`; Playwright
-only discovers tests under `e2e`. Domain tests run in Node; Vue component tests
-use jsdom and Vue Test Utils. Test and configuration files are also typechecked
-by the build.
+Tests are independent of the production build. Vitest discovers
+`src/tests/**/*.test.ts`; Playwright discovers `e2e`. Domain tests run in Node;
+Vue tests use jsdom. Missing implementations fail normally, without artificial
+assertions, TODO tests, or suppressed failures.
 
-## Starting in red
+## Proposed contracts to implement
 
-Timer functions contain only signatures and explicit TODO errors. Their tests
-fail because those functions are unimplemented. Component and E2E tests fail
-because the required elements do not exist. There are no deliberately false
-assertions, expected-failure markers, or suppressed failures. Missing selectors
-produce normal test failures and a nonzero exit code.
+`src/tests/contracts.ts` documents the future API. It contains types only.
+Tests cast existing imports to these contracts so the build stays usable while
+methods and exports are absent. Those casts do not create functions or hide
+runtime failures. Copy/adapt the contracts into production modules as you build.
+No production implementation was changed when completing these tests.
 
-The proposed UI contracts are:
+### Domain sessions
+
+Export `createSessionState(sessions)` and `completeSession(sessions, state)`
+from `src/domain/pomodoro.ts`.
+
+Each supplied session has `id`, `durationSeconds`, and `countsAsFocus`.
+The returned state has `sessionIndex`, `remainingSeconds`, and
+`completedFocusSessions`. Initialization starts at index zero with the first
+supplied duration and zero completions. Completion advances to the next entry,
+wraps at the end, loads its duration, and increments the count only when the
+finished entry has `countsAsFocus: true`. Return new state without mutating inputs.
+
+The configured sequence may include any durations or arrangement of rests.
+The short numbers in tests are fixtures, not app defaults. No 25/5/15 durations
+or every-four-sessions rule is prescribed.
+
+### Composable
+
+`usePomodoro(configuration)` accepts either a standalone number of seconds
+(the existing countdown API) or the supplied session array above.
+
+Return `remainingSeconds`, `isRunning`, `activeSessionId`, and
+`completedFocusSessions` refs, plus `start()`, `pause()`, and `reset()`.
+The session refs are tested only for array configuration.
+
+The tests specify these proposed behaviours:
+
+- Initially idle; starting counts down once per second.
+- Calling start while already running does not create another clock.
+- Pause stops the clock; resume continues from the remaining time.
+- Reset stops the clock and restores the current session's configured duration.
+  It preserves the current session and completed count.
+- A standalone numeric timer stops at zero.
+- Finishing a configured session prepares the next one and waits for start.
+- Completed rests do not increment the focus count.
+- Unmounting stops the clock and prevents further updates.
+
+These lifecycle behaviours are explicit test contracts. If you prefer different
+reset or auto-start behaviour, change those expectations before implementing.
+The tests check observable state; the domain/composable separation is an
+architectural requirement, rather than a test of internal function calls.
+
+### Components and E2E
 
 | Component | Input | Output / selector |
 | --- | --- | --- |
-| TimerDisplay | `value`: formatted string | `[data-testid="timer-display"]` displays that value |
+| TimerDisplay | `value`: formatted string | `[data-testid="timer-display"]` displays and updates that value |
 | TimerControls | `isRunning`: boolean | `start`, `pause`, `reset` events |
 | TimerControls | Idle state | `[data-testid="start-button"]` |
 | TimerControls | Running state | `[data-testid="pause-button"]` |
 | TimerControls | Either state | `[data-testid="reset-button"]` |
 
-These are contracts to implement, not existing functionality. `App.vue` does not
-yet import the placeholder components. Start with the timer utility tests, then
-decide session rules, define the composable contract, and connect the UI.
+Current E2E tests check the display and start/pause control interaction. They
+are not yet an assertion of session durations or countdown integration.
 
 Tool references: [Vitest configuration](https://vitest.dev/config/),
 [Vue Test Utils](https://test-utils.vuejs.org/installation/),
