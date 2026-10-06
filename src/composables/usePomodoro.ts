@@ -4,7 +4,7 @@
 import type { Ref } from "vue";
 import { ref, onUnmounted } from "vue";
 import { decrementTime } from "../domain/timer";
-import { createSessionState } from "../domain/pomodoro";
+import { createSessionState, completeSession } from "../domain/pomodoro";
 import type { SessionConfig } from "../domain/pomodoro";
 
 // Minimal contract only: the caller supplies the duration. No clock or state yet.
@@ -36,6 +36,7 @@ export function usePomodoro(
   );
   const completedFocusSessions = ref(initialState?.completedFocusSessions ?? 0);
 
+  let sessionIndex = initialState?.sessionIndex ?? 0;
   let intervalId: ReturnType<typeof setInterval> | undefined;
 
   function start() {
@@ -46,6 +47,19 @@ export function usePomodoro(
 
       if (remainingSeconds.value === 0) {
         pause();
+
+        if (typeof configuration !== "number") {
+          const nextState = completeSession(configuration, {
+            sessionIndex,
+            remainingSeconds: remainingSeconds.value,
+            completedFocusSessions: completedFocusSessions.value,
+          });
+
+          sessionIndex = nextState.sessionIndex;
+          remainingSeconds.value = nextState.remainingSeconds;
+          completedFocusSessions.value = nextState.completedFocusSessions;
+          activeSessionId.value = configuration[sessionIndex]!.id;
+        }
       }
     }, 1000);
   }
@@ -58,7 +72,10 @@ export function usePomodoro(
 
   function reset() {
     pause();
-    remainingSeconds.value = durationSeconds;
+    remainingSeconds.value =
+      typeof configuration === "number"
+        ? configuration
+        : configuration[sessionIndex]!.durationSeconds;
   }
 
   onUnmounted(pause);
