@@ -2,24 +2,14 @@
 import TimerDisplay from "./components/TimerDisplay.vue";
 import TimerControls from "./components/TimerControls.vue";
 import { formatTime } from "./domain/timer";
-import { ref } from "vue";
+import { usePomodoro } from "./composables/usePomodoro.ts";
 
-const isRunning = ref(false);
-
-function start() {
-  isRunning.value = true;
-}
-function pause() {
-  isRunning.value = false;
-}
-function reset() {
-  isRunning.value = false;
-}
+const { remainingSeconds, isRunning, start, pause, reset } = usePomodoro(65);
 </script>
 
 <template>
   <main>
-    <TimerDisplay :value="formatTime(65)" />
+    <TimerDisplay :value="formatTime(remainingSeconds)" />
     <TimerControls
       :isRunning="isRunning"
       @start="start"
