@@ -70,6 +70,35 @@ describe('timer synchronization lifecycle', () => {
     expect(sync.message.value).toContain('another device')
     expect(timer.status.value).toBe('ready')
   })
+  it('keeps controls enabled during background polling', async () => {
+    user.value = { id: 'ash' }
+    await setup()
+    let finishPoll!: (response: Response) => void
+    fetchMock.mockImplementationOnce(() => new Promise<Response>(resolve => { finishPoll = resolve }))
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(sync.busy.value).toBe(false)
+    expect(sync.disabled.value).toBe(false)
+    finishPoll(response())
+    await flushPromises()
+    expect(sync.disabled.value).toBe(false)
+  })
+  it('prioritizes a button press and ignores a late response from the cancelled poll', async () => {
+    user.value = { id: 'ash' }
+    await setup()
+    let finishPoll!: (response: Response) => void
+    fetchMock.mockImplementationOnce(() => new Promise<Response>(resolve => { finishPoll = resolve }))
+    await vi.advanceTimersByTimeAsync(3000)
+    fetchMock.mockResolvedValueOnce(response(1))
+    expect(await sync.request({ type: 'reset' })).toBe(true)
+    expect(fetchMock.mock.calls[1]![1].signal.aborted).toBe(true)
+    expect(JSON.parse(fetchMock.mock.calls[2]![1].body)).toEqual({ revision: 0, command: { type: 'reset' } })
+    finishPoll(response(99))
+    await flushPromises()
+    expect(save).toHaveBeenCalledTimes(2)
+    expect(sync.busy.value).toBe(false)
+    expect(sync.disabled.value).toBe(false)
+  })
   it('shows offline errors, retains the countdown, and recovers on the next poll', async () => {
     user.value = { id: 'ash' }
     await setup()

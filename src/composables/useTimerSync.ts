@@ -13,18 +13,26 @@ export function useTimerSync(user: Ref<User | null>, timer: ReturnType<typeof us
   const disabled = computed(() => !!user.value && (!ready.value || busy.value))
   let revision = -1
   let generation = 0
+  let requestSequence = 0
   let inFlight = false
   let controller: AbortController | undefined
   let interval: ReturnType<typeof setInterval> | undefined
 
   async function request(command?: TimerCommand) {
-    if (!user.value || inFlight || (command && !ready.value)) return false
+    if (!user.value || (command && !ready.value)) return false
+    if (inFlight) {
+      if (!command || busy.value) return false
+      // A control action takes priority over a background read.
+      controller?.abort()
+    }
     const accountGeneration = generation
+    const sequence = ++requestSequence
+    const isCurrent = () => accountGeneration === generation && sequence === requestSequence
     const startedAt = Date.now()
     const activeController = new AbortController()
     controller = activeController
     inFlight = true
-    busy.value = true
+    busy.value = !!command
     const timeout = setTimeout(() => activeController.abort(), 10000)
     try {
       const response = await fetch('/.netlify/functions/timer', {
@@ -32,10 +40,10 @@ export function useTimerSync(user: Ref<User | null>, timer: ReturnType<typeof us
         signal: activeController.signal,
         ...(command ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ command, revision }) } : {}),
       })
-      if (accountGeneration !== generation) return false
+      if (!isCurrent()) return false
       if (!response.ok && response.status !== 409) throw new Error(response.status === 401 ? 'session' : 'network')
       const data: SharedTimerResponse = await response.json()
-      if (accountGeneration !== generation) return false
+      if (!isCurrent()) return false
       if (!isSharedTimerState(data.state) || !Number.isInteger(data.revision) || !Number.isFinite(data.serverNow)) throw new Error('invalid')
       if (data.revision !== revision) {
         saveSettings(data.state.settings)
@@ -47,7 +55,7 @@ export function useTimerSync(user: Ref<User | null>, timer: ReturnType<typeof us
       message.value = response.status === 409 ? 'The timer changed on another device. Updated here; try your action again.' : 'Synced across your devices'
       return response.ok
     } catch (error) {
-      if (accountGeneration === generation) {
+      if (isCurrent()) {
         message.value = error instanceof Error && error.message === 'session'
           ? 'Your session expired. Sign out and sign in again to sync.'
           : 'Could not sync. Checking again shortly. Changes need a connection.'
@@ -55,7 +63,7 @@ export function useTimerSync(user: Ref<User | null>, timer: ReturnType<typeof us
       return false
     } finally {
       clearTimeout(timeout)
-      if (accountGeneration === generation) { inFlight = false; busy.value = false }
+      if (isCurrent()) { inFlight = false; busy.value = false }
     }
   }
 
