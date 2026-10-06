@@ -4,7 +4,8 @@ test.beforeEach(async ({ page }) => {
   // Freeze browser time before loading the app; advance it explicitly in tests.
   const now = new Date('2026-01-01T00:00:00Z')
   await page.clock.install({ time: now })
-  await page.clock.pauseAt(now)
+  // Pause at a future instant so setup latency cannot put the target in the past.
+  await page.clock.pauseAt(new Date(now.getTime() + 60_000))
   await page.goto('/')
 })
 
