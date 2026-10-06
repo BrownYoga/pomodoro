@@ -48,7 +48,31 @@ Reset makes it ready again.
 Settings are saved in this browser. Reloading starts a fresh timer and clears
 this visit's count. Invalid saved data falls back to defaults; if storage is
 unavailable, settings still apply for the current visit. The focus intention is
-not persisted. There is no account, backend, or data upload.
+not persisted. Optional accounts use Netlify Identity; timer state and settings
+are not uploaded or synchronized yet.
+
+## Accounts
+
+Sign in opens an email/password dialog. Guests can keep using every timer feature.
+Account creation supports email confirmation, and Forgot password sends a reset
+link. Confirmation, recovery, and invitation links are processed on page load.
+Signing in or out does not reset the timer. The Identity SDK manages the saved
+authentication session; the app does not save passwords.
+
+After deploying, open [this project's Identity settings](https://app.netlify.com/projects/ashwillpomodoro/identity)
+and select **Enable Identity**. Leave registration open to allow Create account,
+or use invite-only registration. Keep email confirmation enabled. Test signup,
+confirmation, sign-in, password recovery, and sign-out on the HTTPS deployed site.
+No client secret or environment variable is needed for email/password login.
+If Identity is unavailable, the account dialog offers a retry and guest timers
+continue working. Plain `pnpm dev` does not provide a real Identity service.
+
+Automated account tests mock the Identity SDK or its HTTP responses; they do not
+create live accounts or send real emails. Cross-device timer persistence and sync
+will be a separate change. Accounts alone do not make a running timer follow you
+to another device.
+
+Setup reference: [Netlify Identity](https://docs.netlify.com/manage/security/secure-access-to-sites/identity/get-started/).
 
 Enable completion sound in Settings for a short chime. Audio is activated when
 you press Start and depends on the browser allowing audio playback. The app also
@@ -62,6 +86,7 @@ and R resets; shortcuts do not intercept typing or button activation.
 - `src/domain/settings.ts`: configuration validation and session sequence creation.
 - `src/composables/usePomodoro.ts`: reactive state, lifecycle, and clock scheduling.
 - `src/composables/useSettings.ts`: browser storage boundary.
+- `src/composables/useAuth.ts`: Netlify Identity session and authentication boundary.
 - `src/composables/useCompletionSound.ts`: optional browser audio boundary.
 - `src/components`: display, controls, and settings dialog with scoped SCSS.
 - `src/App.vue`: composes the screen, keyboard input, title, and completion feedback.

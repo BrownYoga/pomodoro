@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import TimerDisplay from "./components/TimerDisplay.vue";
 import TimerControls from "./components/TimerControls.vue";
 import TimerSettings from "./components/TimerSettings.vue";
+import AccountMenu from "./components/AccountMenu.vue";
 import { formatTime } from "./domain/timer";
 import { buildConfiguration } from "./domain/settings";
 import type { TimerSettings as Settings } from "./domain/settings";
@@ -23,6 +24,7 @@ const {
 } = timer;
 const sound = useCompletionSound();
 const settingsOpen = ref(false);
+const accountOpen = ref(false);
 const settingsButton = ref<HTMLButtonElement>();
 const focusTask = ref("");
 const announcement = ref("");
@@ -118,6 +120,7 @@ watch(
 function onKeydown(event: KeyboardEvent) {
   if (
     settingsOpen.value ||
+    accountOpen.value ||
     event.repeat ||
     event.ctrlKey ||
     event.altKey ||
@@ -155,6 +158,8 @@ onUnmounted(() => {
         ><span class="palette" aria-hidden="true"><i /><i /><i /><i /></span
         ><span>pomodoro<span class="brand-dot">.</span></span></a
       >
+      <div class="header-actions">
+      <AccountMenu @dialog-change="accountOpen = $event" />
       <button
         ref="settingsButton"
         class="settings-button"
@@ -163,6 +168,7 @@ onUnmounted(() => {
       >
         <span aria-hidden="true">⚙</span> Settings
       </button>
+      </div>
     </header>
     <main id="timer" class="timer-page">
       <p class="eyebrow">A LITTLE TIME, WELL SPENT</p>
@@ -281,7 +287,9 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: 1rem;
   padding: 2rem 0;
+  flex-wrap: wrap;
 }
+.header-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
 .brand {
   color: var(--color-lime);
   text-decoration: none;
