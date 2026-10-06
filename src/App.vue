@@ -8,13 +8,15 @@ const { remainingSeconds, isRunning, start, pause, reset } = usePomodoro(65);
 </script>
 
 <template>
-  <main>
+  <main class="timer-page">
     <TimerDisplay :value="formatTime(remainingSeconds)" />
-    <TimerControls
+    <div class="timer-controls">
+      <TimerControls
       :isRunning="isRunning"
       @start="start"
       @pause="pause"
       @reset="reset"
-    />
+      />
+    </div>
   </main>
 </template>
