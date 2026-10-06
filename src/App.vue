@@ -10,9 +10,13 @@ import type { TimerSettings as Settings } from "./domain/settings";
 import { usePomodoro } from "./composables/usePomodoro";
 import { useSettings } from "./composables/useSettings";
 import { useCompletionSound } from "./composables/useCompletionSound";
+import { useAuth } from "./composables/useAuth";
+import { useTimerSync } from "./composables/useTimerSync";
 
 const { settings, save, storageMessage } = useSettings();
 const timer = usePomodoro(buildConfiguration(settings.value));
+const auth = useAuth();
+const sync = useTimerSync(auth.user, timer, save);
 const {
   remainingSeconds,
   isRunning,
@@ -74,15 +78,23 @@ const sessionHint = computed(() =>
 function start() {
   if (settings.value.soundEnabled) void sound.unlock();
   announcement.value = "";
-  timer.start();
+  if (auth.user.value) void sync.request({ type: "start" });
+  else timer.start();
+}
+function pause() {
+  if (auth.user.value) void sync.request({ type: "pause" });
+  else timer.pause();
 }
 function reset() {
   announcement.value = "";
-  timer.reset();
+  if (auth.user.value) void sync.request({ type: "reset" });
+  else timer.reset();
 }
 function selectMode(index: number) {
+  if (index < 0) return;
   announcement.value = "";
-  timer.selectSession(index);
+  if (auth.user.value) void sync.request({ type: "select", index });
+  else timer.selectSession(index);
 }
 function openSettings() {
   settingsOpen.value = true;
@@ -92,9 +104,13 @@ async function closeSettings() {
   await nextTick();
   settingsButton.value?.focus();
 }
-function applySettings(next: Settings) {
-  save(next);
-  timer.configure(buildConfiguration(next));
+async function applySettings(next: Settings) {
+  if (auth.user.value) {
+    if (!await sync.request({ type: "configure", settings: next })) return;
+  } else {
+    save(next);
+    timer.configure(buildConfiguration(next));
+  }
   announcement.value = "Settings saved. Your new timer is ready.";
   void closeSettings();
 }
@@ -136,7 +152,7 @@ function onKeydown(event: KeyboardEvent) {
     return;
   if (event.code === "Space") {
     event.preventDefault();
-    if (isRunning.value) timer.pause();
+    if (isRunning.value) pause();
     else start();
   }
   if (event.key.toLowerCase() === "r") {
@@ -159,7 +175,7 @@ onUnmounted(() => {
         ><span>pomodoro<span class="brand-dot">.</span></span></a
       >
       <div class="header-actions">
-      <AccountMenu @dialog-change="accountOpen = $event" />
+      <AccountMenu :auth="auth" @dialog-change="accountOpen = $event" />
       <button
         ref="settingsButton"
         class="settings-button"
@@ -177,6 +193,7 @@ onUnmounted(() => {
           v-for="mode in modes"
           :key="mode.label"
           :aria-pressed="mode.active"
+          :disabled="sync.disabled.value"
           :class="{ active: mode.active }"
           :data-testid="`mode-${mode.label.toLowerCase().replace(' ', '-')}`"
           @click="selectMode(mode.index)"
@@ -220,14 +237,17 @@ onUnmounted(() => {
         <span :style="{ width: `${progress}%` }" />
       </div>
       <p class="session-hint">{{ sessionHint }}</p>
+      <fieldset class="controls-fieldset" :disabled="sync.disabled.value" aria-label="Timer controls">
       <TimerControls
         :is-running="isRunning"
         :paused="status === 'paused'"
         :finished="status === 'finished'"
         @start="start"
-        @pause="timer.pause"
+        @pause="pause"
         @reset="reset"
       />
+      </fieldset>
+      <p v-if="sync.message.value" class="sync-message" data-testid="sync-status" role="status">{{ sync.message.value }}</p>
       <p class="announcement" role="status" data-testid="completion-message">
         {{ announcement || "\u00a0" }}
       </p>
@@ -245,11 +265,11 @@ onUnmounted(() => {
             completedFocusSessions
           }}</strong
           ><span
-            >focus
+          >focus
             {{
               completedFocusSessions === 1 ? "session" : "sessions"
             }}
-            completed<br /><small>this visit</small></span
+            completed<br /><small>{{ auth.user.value ? 'your account' : 'this visit' }}</small></span
           >
         </div>
       </div>
@@ -290,6 +310,9 @@ onUnmounted(() => {
   flex-wrap: wrap;
 }
 .header-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
+.controls-fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.controls-fieldset:disabled { opacity: .6; }
+.sync-message { color: var(--color-muted); text-align: center; font-size: .75rem; max-width: 30rem; line-height: 1.5; }
 .brand {
   color: var(--color-lime);
   text-decoration: none;

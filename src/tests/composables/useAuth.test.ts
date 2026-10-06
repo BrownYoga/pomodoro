@@ -89,6 +89,19 @@ describe('useAuth', () => {
     expect(auth.user.value).toBeNull()
     expect(auth.notice.value).toContain('confirmation link')
   })
+  it('saves the supplied signup name as profile metadata', async () => {
+    const auth = await setup()
+    auth.changeMode('signup')
+    await auth.submit('timer@example.com', 'a-password', ' Ash ')
+    expect(identity.signup).toHaveBeenCalledWith('timer@example.com', 'a-password', { full_name: 'Ash' })
+  })
+  it('allows existing accounts to save a name without losing other profile metadata', async () => {
+    vi.mocked(identity.getUser).mockResolvedValue({ ...account, userMetadata: { avatar_url: 'avatar.png' } })
+    const auth = await setup()
+    auth.changeMode('profile')
+    expect(await auth.submit('', '', ' Ash ')).toBe(true)
+    expect(identity.updateUser).toHaveBeenCalledWith({ data: { avatar_url: 'avatar.png', full_name: 'Ash' } })
+  })
   it('supports automatic confirmation when configured by the site owner', async () => {
     vi.mocked(identity.getSettings).mockResolvedValue({ ...configuration, autoconfirm: true })
     const auth = await setup()

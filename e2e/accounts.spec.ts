@@ -1,11 +1,24 @@
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
+import { applyTimerCommand, freshTimer, reconcileTimer } from '../src/domain/sharedTimer'
 
-const account = { id: 'e2e-user', email: 'timer@example.com', user_metadata: {}, app_metadata: { provider: 'email' } }
+const account = { id: 'e2e-user', email: 'timer@example.com', user_metadata: { full_name: 'Timer Tester' }, app_metadata: { provider: 'email' } }
 // Fictional session used only by intercepted HTTP responses. No live service is contacted.
 const jwt = `${Buffer.from('{"alg":"HS256","typ":"JWT"}').toString('base64url')}.${Buffer.from(JSON.stringify({ sub: account.id, exp: 4_000_000_000 })).toString('base64url')}.test-signature`
 
 async function mockIdentity(page: Page, options: { unavailable?: boolean; invalidLogin?: boolean; inviteOnly?: boolean } = {}, landingPath = '/') {
+  let state = freshTimer()
+  let revision = 0
+  let responseAccount = structuredClone(account)
+  let serverNow = new Date('2026-01-01T00:01:00Z').getTime()
+  await page.route('**/.netlify/functions/timer', async route => {
+    serverNow = await page.evaluate(() => Date.now())
+    const command = route.request().method() === 'POST' ? route.request().postDataJSON().command : undefined
+    const next = command ? applyTimerCommand(state, command, serverNow) : reconcileTimer(state, serverNow)
+    if (next !== state) revision++
+    state = next
+    await route.fulfill({ json: { state, revision, serverNow } })
+  })
   await page.route('**/.netlify/identity/**', async (route) => {
     const path = new URL(route.request().url()).pathname.split('/').at(-1)
     if (options.unavailable) {
@@ -17,7 +30,10 @@ async function mockIdentity(page: Page, options: { unavailable?: boolean; invali
         ? { status: 400, json: { error: 'invalid_grant', error_description: 'Invalid credentials' } }
         : { json: { access_token: jwt, refresh_token: 'e2e-refresh', token_type: 'bearer', expires_in: 3600 } })
     } else if (path === 'user' || path === 'signup') {
-      await route.fulfill({ json: account })
+      if (route.request().method() === 'PUT') {
+        responseAccount = { ...responseAccount, user_metadata: route.request().postDataJSON().data }
+      }
+      await route.fulfill({ json: responseAccount })
     } else if (path === 'logout' || path === 'recover') {
       await route.fulfill({ json: {} })
     } else {
@@ -39,16 +55,25 @@ test('signs in, restores the account on reload, and signs out without resetting 
   await page.getByTestId('auth-password').fill('test-password')
   await page.getByTestId('auth-submit').click()
   await expect(page.getByTestId('account-dialog')).not.toBeVisible()
-  await expect(page.getByTestId('account-email')).toHaveText(account.email)
+  await expect(page.getByTestId('account-email')).toHaveText(account.user_metadata.full_name)
+  await expect(page.getByTestId('sync-status')).toHaveText('Synced across your devices')
+  await page.getByTestId('account-email').click()
+  await page.getByTestId('auth-name').fill('Ash')
+  await page.getByTestId('auth-submit').click()
+  await expect(page.getByTestId('account-email')).toHaveText('Ash')
+  // Signing in loads the account's shared timer; this new test account starts ready.
+  await page.getByTestId('start-button').click()
+  await expect(page.getByTestId('timer-status')).toHaveText('Running')
+  await page.clock.runFor(1000)
   await expect(page.getByTestId('timer-status')).toHaveText('Running')
   await expect(page.getByTestId('timer-display')).toHaveText('24:59')
   await page.reload()
-  await expect(page.getByTestId('account-email')).toHaveText(account.email)
-  await page.getByTestId('start-button').click()
+  await expect(page.getByTestId('account-email')).toHaveText('Ash')
+  await expect(page.getByTestId('sync-status')).toHaveText('Synced across your devices')
   await page.clock.runFor(2000)
   await page.getByTestId('sign-out').click()
   await expect(page.getByTestId('open-account')).toBeVisible()
-  await expect(page.getByTestId('timer-display')).toHaveText('24:58')
+  await expect(page.getByTestId('timer-display')).toHaveText('24:57')
   await expect(page.getByTestId('timer-status')).toHaveText('Running')
   await page.reload()
   await expect(page.getByTestId('open-account')).toBeVisible()
@@ -59,6 +84,10 @@ test('shows a sign-in error and allows another attempt', async ({ page }) => {
   await page.getByTestId('open-account').click()
   await page.getByTestId('auth-email').fill('timer@example.com')
   await page.getByTestId('auth-password').fill('wrong-password')
+  await page.getByTestId('toggle-password').click()
+  await expect(page.getByTestId('auth-password')).toHaveAttribute('type', 'text')
+  await page.getByTestId('toggle-password').click()
+  await expect(page.getByTestId('auth-password')).toHaveAttribute('type', 'password')
   await page.getByTestId('auth-submit').click()
   await expect(page.getByTestId('auth-error')).toContainText('Could not sign in')
   await expect(page.getByTestId('auth-submit')).toBeEnabled()
@@ -71,6 +100,7 @@ test('shows email confirmation instructions and supports requesting a recovery l
   await mockIdentity(page)
   await page.getByTestId('open-account').click()
   await page.getByTestId('create-account').click()
+  await page.getByTestId('auth-name').fill('Timer Tester')
   await page.getByTestId('auth-email').fill('timer@example.com')
   await page.getByTestId('auth-password').fill('test-password')
   await page.getByTestId('auth-submit').click()
@@ -115,15 +145,17 @@ for (const callback of ['recovery', 'invite'] as const) {
     await expect(page.getByRole('heading', { name: 'Choose a new password' })).toBeVisible()
     await expect(page).toHaveURL(/\/$/)
     await page.getByTestId('auth-password').fill('new-test-password')
+    await page.getByTestId('toggle-password').click()
+    await expect(page.getByTestId('auth-password')).toHaveAttribute('type', 'text')
     await page.getByTestId('auth-submit').click()
     await expect(page.getByTestId('account-dialog')).not.toBeVisible()
-    await expect(page.getByTestId('account-email')).toHaveText(account.email)
+    await expect(page.getByTestId('account-email')).toHaveText(account.user_metadata.full_name)
   })
 }
 
 test('confirms an account from its email link', async ({ page }) => {
   await mockIdentity(page, {}, '/#confirmation_token=e2e-link')
-  await expect(page.getByTestId('account-email')).toHaveText(account.email)
+  await expect(page.getByTestId('account-email')).toHaveText(account.user_metadata.full_name)
   await expect(page).toHaveURL(/\/$/)
   await expect(page.getByTestId('timer-display')).toHaveText('25:00')
 })

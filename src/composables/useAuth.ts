@@ -5,7 +5,7 @@ import {
 } from '@netlify/identity'
 import type { Settings, User } from '@netlify/identity'
 
-export type AuthMode = 'login' | 'signup' | 'recovery' | 'password'
+export type AuthMode = 'login' | 'signup' | 'recovery' | 'password' | 'profile'
 
 export function useAuth() {
   const user = shallowRef<User | null>(null)
@@ -48,12 +48,18 @@ export function useAuth() {
     notice.value = ''
   }
 
-  async function submit(email: string, password: string): Promise<boolean> {
+  async function submit(email: string, password: string, name = ''): Promise<boolean> {
     if (busy.value || !settings.value) return false
     busy.value = true
     error.value = ''
     notice.value = ''
     try {
+      if (mode.value === 'profile') {
+        if (!name.trim() || name.trim().length > 80) throw new Error('Invalid name')
+        user.value = await updateUser({ data: { ...user.value?.userMetadata, full_name: name.trim() } })
+        mode.value = 'login'
+        return true
+      }
       if (mode.value === 'login') {
         user.value = await login(email, password)
         return true
@@ -63,7 +69,7 @@ export function useAuth() {
           error.value = 'Registration is by invitation. Ask the site owner for an invite.'
           return false
         }
-        const created = await signup(email, password)
+        const created = name.trim() ? await signup(email, password, { full_name: name.trim() }) : await signup(email, password)
         if (settings.value.autoconfirm) {
           user.value = created
           return true
@@ -92,6 +98,8 @@ export function useAuth() {
 
   async function signOut() {
     if (busy.value) return
+    mode.value = 'login'
+    notice.value = ''
     busy.value = true
     error.value = ''
     try {

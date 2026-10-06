@@ -2,6 +2,10 @@
   command = "pnpm test:unit && pnpm build"
   publish = "dist"
 
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
 # Serve the Vue app for client-side routes, while preserving real static files.
 [[redirects]]
   from = "/*"

@@ -1,0 +1,6 @@
+CREATE TABLE IF NOT EXISTS pomodoro_timers (
+  user_id TEXT PRIMARY KEY,
+  state JSONB NOT NULL,
+  revision INTEGER NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

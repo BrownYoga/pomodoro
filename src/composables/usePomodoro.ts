@@ -3,6 +3,8 @@ import type { Ref } from 'vue'
 import { createSessionState, completeSession, validateSessions } from '../domain/pomodoro'
 import type { SessionConfig } from '../domain/pomodoro'
 import { remainingTime, sessionProgress } from '../domain/timer'
+import type { SharedTimerState } from '../domain/sharedTimer'
+import { buildConfiguration } from '../domain/settings'
 
 export type TimerStatus = 'ready' | 'running' | 'paused' | 'finished'
 export interface PomodoroTimer {
@@ -112,9 +114,26 @@ export function usePomodoro(initialConfiguration: number | readonly SessionConfi
     reset()
   }
 
+  function restore(state: SharedTimerState, serverNow: number) {
+    configure(buildConfiguration(state.settings))
+    sessionIndex.value = state.sessionIndex
+    activeSessionId.value = sessions.value[state.sessionIndex]?.id ?? ''
+    completedFocusSessions.value = state.completedFocusSessions
+    status.value = state.status
+    remainingMilliseconds = state.status === 'running'
+      ? Math.max(0, state.endsAt! - serverNow) : state.remainingMilliseconds
+    remainingSeconds.value = Math.ceil(remainingMilliseconds / 1000)
+    if (state.status === 'running') {
+      isRunning.value = true
+      deadline = Date.now() + remainingMilliseconds
+      intervalId = setInterval(tick, 250)
+      tick()
+    }
+  }
+
   configure(initialConfiguration)
   onUnmounted(stopClock)
   return { remainingSeconds, isRunning, status, activeSessionId, completedFocusSessions,
     start, pause, reset, configure, selectSession, sessionIndex, sessions,
-    durationSeconds, progress, completionCount, lastCompletedSession }
+    durationSeconds, progress, completionCount, lastCompletedSession, restore }
 }
