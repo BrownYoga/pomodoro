@@ -2,8 +2,9 @@
 // plain TypeScript domain. Own start/pause/reset and clean up on unmount.
 // Session configuration and transition rules have not been chosen yet.
 import type { Ref } from "vue";
-import { ref } from "vue";
+import { ref, onUnmounted } from "vue";
 import { decrementTime } from "../domain/timer";
+import { on } from "@primeuix/themes/aura/floatlabel";
 
 // Minimal contract only: the caller supplies the duration. No clock or state yet.
 export interface PomodoroTimer {
@@ -42,6 +43,8 @@ export function usePomodoro(durationSeconds: number): PomodoroTimer {
     pause();
     remainingSeconds.value = durationSeconds;
   }
+
+  onUnmounted(pause);
 
   return {
     remainingSeconds,
