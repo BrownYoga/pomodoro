@@ -2,6 +2,22 @@
 
 A Vue 3 + TypeScript focus timer with a configurable session sequence.
 
+## Netlify deployment
+
+Import `BrownYoga/pomodoro` from GitHub in Netlify and choose `main` as the
+production branch. Leave the base directory empty. The checked-in
+`netlify.toml` runs `pnpm test:unit && pnpm build` and publishes `dist`.
+`.nvmrc` selects Node 24, and `package.json` pins pnpm 12.9.1.
+
+Netlify automatically installs dependencies using `pnpm-lock.yaml`. Unit tests
+and typechecking must pass before a new build is published. E2E tests remain a
+separate local check. After linking the repository, each push to `main` triggers
+a fresh deployment. Committing this configuration alone does not link the
+Netlify account or create a hosted site.
+
+Setup: [Import a Git repository](https://docs.netlify.com/start/quickstarts/deploy-from-repository/).
+Version configuration: [Netlify dependency management](https://docs.netlify.com/build/configure-builds/manage-dependencies/).
+
 ## Use the app
 
 ```sh
