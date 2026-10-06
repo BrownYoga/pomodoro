@@ -11,6 +11,7 @@ export interface PomodoroTimer {
   isRunning: Ref<boolean>;
   start: () => void;
   pause: () => void;
+  reset: () => void;
 }
 
 export function usePomodoro(durationSeconds: number): PomodoroTimer {
@@ -24,6 +25,10 @@ export function usePomodoro(durationSeconds: number): PomodoroTimer {
     isRunning.value = true;
     intervalId = setInterval(() => {
       remainingSeconds.value = decrementTime(remainingSeconds.value, 1);
+
+      if (remainingSeconds.value === 0) {
+        pause();
+      }
     }, 1000);
   }
 
@@ -33,10 +38,16 @@ export function usePomodoro(durationSeconds: number): PomodoroTimer {
     isRunning.value = false;
   }
 
+  function reset() {
+    pause();
+    remainingSeconds.value = durationSeconds;
+  }
+
   return {
     remainingSeconds,
     isRunning,
     start,
     pause,
+    reset,
   };
 }
