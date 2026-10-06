@@ -1,3 +1,13 @@
-﻿// Placeholder: define session configuration, next-session rules, and completed
-// focus counting here after choosing the rules. No Vue or browser imports.
-export {}
+﻿export interface SessionConfig {
+  id: string;
+  durationSeconds: number;
+  countsAsFocus: boolean;
+}
+
+export function createSessionState(sessions: readonly SessionConfig[]) {
+  return {
+    sessionIndex: 0,
+    remainingSeconds: sessions[0]!.durationSeconds,
+    completedFocusSessions: 0,
+  };
+}
