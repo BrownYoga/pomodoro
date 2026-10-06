@@ -1,72 +1,24 @@
-:root {
+﻿:root {
   --color-background: #1d1d1d;
+  --color-surface: #252726;
   --color-lime: #e5efc1;
   --color-mint: #a2d5ab;
   --color-teal: #39aea9;
   --color-blue: #557b83;
   --color-red: #ef8585;
-  font-family: system-ui, sans-serif;
+  --color-muted: #a7b1a7;
+  --color-border: #ffffff15;
+  font-family: system-ui, -apple-system, sans-serif;
   color: var(--color-lime);
   background: var(--color-background);
   color-scheme: dark;
+  font-synthesis: none;
 }
-
-* {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-}
-
-.timer-page {
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2rem;
-  padding: 1.5rem;
-}
-
-.timer-controls {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.75rem;
-}
-
-.timer-controls button {
-  min-width: 7rem;
-  min-height: 3rem;
-  padding: 0.75rem 1.5rem;
-  border: 0;
-  border-radius: 0.75rem;
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-[data-testid="start-button"] {
-  color: var(--color-background);
-  background: var(--color-mint);
-}
-
-[data-testid="pause-button"] {
-  color: var(--color-background);
-  background: var(--color-teal);
-}
-
-[data-testid="reset-button"] {
-  color: var(--color-background);
-  background: var(--color-red);
-}
-
-.timer-controls button:hover {
-  filter: brightness(1.1);
-}
-
-.timer-controls button:focus-visible {
-  outline: 3px solid var(--color-lime);
-  outline-offset: 4px;
-}
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 280px; }
+button, input { font: inherit; }
+button { border: 0; cursor: pointer; }
+button, input, a { -webkit-tap-highlight-color: transparent; }
+button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid var(--color-mint); outline-offset: 4px; }
+::selection { background: var(--color-teal); color: var(--color-background); }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }

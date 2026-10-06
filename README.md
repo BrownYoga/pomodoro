@@ -1,98 +1,79 @@
-﻿# Pomodoro learning project
+﻿# Pomodoro
 
-Vue 3 + TypeScript + Vite, developed by making behaviour tests pass one at a time.
+A Vue 3 + TypeScript focus timer with a configurable session sequence.
 
-## Layers
-
-- `src/domain`: pure TypeScript calculations and session rules, independent of Vue.
-- `src/composables`: Vue refs, clock lifecycle, and calls to domain functions.
-- `src/components`: display supplied values and emit control actions.
-- `src/tests`: runnable domain, composable, and component tests.
-- `e2e`: Playwright tests using `data-testid` selectors against the assembled UI.
-
-## Commands
+## Use the app
 
 ```sh
 pnpm install
 pnpm dev
-pnpm build
-pnpm test                 # Vitest watch mode
-pnpm test:unit            # All unit/component tests once
-pnpm test:unit src/tests/composables/usePomodoro.test.ts
-pnpm exec playwright install chromium
-pnpm test:e2e             # Starts Vite automatically on port 4173
-pnpm test:e2e:ui
 ```
 
-Tests are independent of the production build. Vitest discovers
-`src/tests/**/*.test.ts`; Playwright discovers `e2e`. Domain tests run in Node;
-Vue tests use jsdom. Missing implementations fail normally, without artificial
-assertions, TODO tests, or suppressed failures.
+Open the local URL printed by Vite. Start, pause, resume, or reset the current
+session. The progress ring, page title, and status follow the timer. You can
+write a focus intention and see completed focus sessions for this visit.
 
-## Proposed contracts to implement
+The starting timer remains the 65-second example from the learning project.
+Open Settings to choose a focus duration and enable alternating rest sessions.
+Durations are entered in minutes (enter 25 for a 25-minute session). Decimals
+are supported, such as 0.5 for 30 seconds; the timer stores whole seconds internally.
+Long rests are
+optional: choose a frequency from 1 to 12, or 0 to disable them. No fixed
+four-session rule is imposed. You can select Focus, Rest, or Long rest directly;
+switching stops and resets that session without counting it as a completion.
 
-`src/tests/contracts.ts` documents the future API. It contains types only.
-Tests cast existing imports to these contracts so the build stays usable while
-methods and exports are absent. Those casts do not create functions or hide
-runtime failures. Copy/adapt the contracts into production modules as you build.
-No production implementation was changed when completing these tests.
+Each completed session prepares the next one but waits for Start. Reset restores
+the current session and preserves the completed count. Saving settings starts a
+fresh sequence and clears the count. A standalone focus timer stops at zero;
+Reset makes it ready again.
 
-### Domain sessions
+Settings are saved in this browser. Reloading starts a fresh timer and clears
+this visit's count. Invalid saved data falls back to defaults; if storage is
+unavailable, settings still apply for the current visit. The focus intention is
+not persisted. There is no account, backend, or data upload.
 
-Export `createSessionState(sessions)` and `completeSession(sessions, state)`
-from `src/domain/pomodoro.ts`.
+Enable completion sound in Settings for a short chime. Audio is activated when
+you press Start and depends on the browser allowing audio playback. The app also
+shows a completion message. While the page is active, Space toggles start/pause
+and R resets; shortcuts do not intercept typing or button activation.
 
-Each supplied session has `id`, `durationSeconds`, and `countsAsFocus`.
-The returned state has `sessionIndex`, `remainingSeconds`, and
-`completedFocusSessions`. Initialization starts at index zero with the first
-supplied duration and zero completions. Completion advances to the next entry,
-wraps at the end, loads its duration, and increments the count only when the
-finished entry has `countsAsFocus: true`. Return new state without mutating inputs.
+## Architecture
 
-The configured sequence may include any durations or arrangement of rests.
-The short numbers in tests are fixtures, not app defaults. No 25/5/15 durations
-or every-four-sessions rule is prescribed.
+- `src/domain/timer.ts`: pure formatting and decrementing utilities.
+- `src/domain/pomodoro.ts`: session validation, initialization, transitions, counts.
+- `src/domain/settings.ts`: configuration validation and session sequence creation.
+- `src/composables/usePomodoro.ts`: reactive state, lifecycle, and clock scheduling.
+- `src/composables/useSettings.ts`: browser storage boundary.
+- `src/composables/useCompletionSound.ts`: optional browser audio boundary.
+- `src/components`: display, controls, and settings dialog with scoped SCSS.
+- `src/App.vue`: composes the screen, keyboard input, title, and completion feedback.
+- `src/tests`: Vitest + Vue Test Utils tests; domain tests run without Vue.
+- `e2e`: Chromium tests using `data-testid` and a controlled browser clock.
 
-### Composable
+The countdown uses a timestamp deadline rather than assuming each scheduled
+callback runs on time. Pausing preserves partial seconds. All clock resources
+are cleaned up when the component unmounts. Background browser scheduling can
+delay visual updates or sounds, but the next callback reconciles elapsed time.
+Closing the page stops the app; this is not a background alarm service.
 
-`usePomodoro(configuration)` accepts either a standalone number of seconds
-(the existing countdown API) or the supplied session array above.
+## Verification
 
-Return `remainingSeconds`, `isRunning`, `activeSessionId`, and
-`completedFocusSessions` refs, plus `start()`, `pause()`, and `reset()`.
-The session refs are tested only for array configuration.
+```sh
+pnpm test                 # Unit/component tests in watch mode
+pnpm test:unit            # Unit/component tests once
+pnpm exec playwright install chromium
+pnpm test:e2e             # Starts Vite on 127.0.0.1:4173 automatically
+pnpm test:e2e:ui          # Interactive Playwright runner
+pnpm build               # Typecheck and production build
+pnpm preview             # Serve the production build
+```
 
-The tests specify these proposed behaviours:
+Build and tests are independent. Tests use the real production API types.
+E2E coverage includes countdown, pause/resume, reset, status, session completion,
+configured long rests, settings validation/persistence, storage failure,
+keyboard shortcuts, and mobile layout. Screenshots are written to ignored
+`test-results/`; failures retain Playwright traces. No skipped or TODO tests.
 
-- Initially idle; starting counts down once per second.
-- Calling start while already running does not create another clock.
-- Pause stops the clock; resume continues from the remaining time.
-- Reset stops the clock and restores the current session's configured duration.
-  It preserves the current session and completed count.
-- A standalone numeric timer stops at zero.
-- Finishing a configured session prepares the next one and waits for start.
-- Completed rests do not increment the focus count.
-- Unmounting stops the clock and prevents further updates.
-
-These lifecycle behaviours are explicit test contracts. If you prefer different
-reset or auto-start behaviour, change those expectations before implementing.
-The tests check observable state; the domain/composable separation is an
-architectural requirement, rather than a test of internal function calls.
-
-### Components and E2E
-
-| Component | Input | Output / selector |
-| --- | --- | --- |
-| TimerDisplay | `value`: formatted string | `[data-testid="timer-display"]` displays and updates that value |
-| TimerControls | `isRunning`: boolean | `start`, `pause`, `reset` events |
-| TimerControls | Idle state | `[data-testid="start-button"]` |
-| TimerControls | Running state | `[data-testid="pause-button"]` |
-| TimerControls | Either state | `[data-testid="reset-button"]` |
-
-Current E2E tests check the display and start/pause control interaction. They
-are not yet an assertion of session durations or countdown integration.
-
-Tool references: [Vitest configuration](https://vitest.dev/config/),
-[Vue Test Utils](https://test-utils.vuejs.org/installation/),
-[Playwright test IDs](https://playwright.dev/docs/locators#locate-by-test-id),
-and [Playwright web server](https://playwright.dev/docs/test-webserver).
+References: [Vue reactivity](https://vuejs.org/api/reactivity-core.html),
+[Playwright clock](https://playwright.dev/docs/clock),
+[Vitest configuration](https://vitest.dev/config/).

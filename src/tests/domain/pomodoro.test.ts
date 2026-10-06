@@ -1,9 +1,7 @@
 ﻿import { describe, expect, it } from 'vitest'
-import * as implementation from '../../domain/pomodoro'
-import type { PomodoroDomain, SessionConfig } from '../contracts'
+import * as domain from '../../domain/pomodoro'
+import type { SessionConfig } from '../../domain/pomodoro'
 
-// The cast describes the API to build. Missing exports still fail at runtime.
-const domain = implementation as unknown as PomodoroDomain
 const sessions: readonly SessionConfig[] = [
   { id: 'work', durationSeconds: 10, countsAsFocus: true },
   { id: 'rest', durationSeconds: 3, countsAsFocus: false },

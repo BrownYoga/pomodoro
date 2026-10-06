@@ -4,10 +4,9 @@ import { defineComponent, isRef } from 'vue'
 import { mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
 import { usePomodoro } from '../../composables/usePomodoro'
-import type { CreateTimer, SessionConfig, TimerContract } from '../contracts'
+import type { SessionConfig, TimerContract } from '../contracts'
 
-// Describes the future API without changing the implementation or blocking builds.
-const createTimer = usePomodoro as unknown as CreateTimer
+const createTimer = usePomodoro
 const sessions: readonly SessionConfig[] = [
   { id: 'work', durationSeconds: 10, countsAsFocus: true },
   { id: 'rest', durationSeconds: 3, countsAsFocus: false },
@@ -176,6 +175,25 @@ describe('usePomodoro', () => {
     wrapper = undefined
     expect(vi.getTimerCount()).toBe(0)
     await vi.advanceTimersByTimeAsync(2000)
+    expect(timer.remainingSeconds.value).toBe(9)
+  })
+
+  it('uses elapsed time when browser callbacks are delayed', async () => {
+    const timer = mountTimer()
+    timer.start()
+    vi.setSystemTime(Date.now() + 5000)
+    await vi.advanceTimersByTimeAsync(250)
+    expect(timer.remainingSeconds.value).toBe(5)
+  })
+
+  it('preserves partial seconds across pause and resume', async () => {
+    const timer = mountTimer()
+    timer.start()
+    await vi.advanceTimersByTimeAsync(500)
+    timer.pause()
+    await vi.advanceTimersByTimeAsync(5000)
+    timer.start()
+    await vi.advanceTimersByTimeAsync(500)
     expect(timer.remainingSeconds.value).toBe(9)
   })
 })

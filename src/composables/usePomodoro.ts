@@ -1,92 +1,120 @@
-﻿// Placeholder: later connect Vue ref() state and the clock lifecycle to the
-// plain TypeScript domain. Own start/pause/reset and clean up on unmount.
-// Session configuration and transition rules have not been chosen yet.
-import type { Ref } from "vue";
-import { ref, onUnmounted } from "vue";
-import { decrementTime } from "../domain/timer";
-import { createSessionState, completeSession } from "../domain/pomodoro";
-import type { SessionConfig } from "../domain/pomodoro";
+﻿import { computed, onUnmounted, ref } from 'vue'
+import type { Ref } from 'vue'
+import { createSessionState, completeSession, validateSessions } from '../domain/pomodoro'
+import type { SessionConfig } from '../domain/pomodoro'
+import { remainingTime, sessionProgress } from '../domain/timer'
 
-// Minimal contract only: the caller supplies the duration. No clock or state yet.
+export type TimerStatus = 'ready' | 'running' | 'paused' | 'finished'
 export interface PomodoroTimer {
-  remainingSeconds: Ref<number>;
-  isRunning: Ref<boolean>;
-  start: () => void;
-  pause: () => void;
-  reset: () => void;
-  activeSessionId: Ref<string>;
-  completedFocusSessions: Ref<number>;
+  remainingSeconds: Ref<number>
+  isRunning: Ref<boolean>
+  status: Ref<TimerStatus>
+  activeSessionId: Ref<string>
+  completedFocusSessions: Ref<number>
+  start: () => void
+  pause: () => void
+  reset: () => void
 }
 
-export function usePomodoro(
-  configuration: number | readonly SessionConfig[],
-): PomodoroTimer {
-  const initialState =
-    typeof configuration === "number"
-      ? undefined
-      : createSessionState(configuration);
-  const durationSeconds =
-    typeof configuration === "number"
-      ? configuration
-      : initialState!.remainingSeconds;
-  const remainingSeconds = ref(durationSeconds);
-  const isRunning = ref(false);
-  const activeSessionId = ref(
-    typeof configuration === "number" ? "" : configuration[0]!.id,
-  );
-  const completedFocusSessions = ref(initialState?.completedFocusSessions ?? 0);
+export function usePomodoro(initialConfiguration: number | readonly SessionConfig[]) {
+  const remainingSeconds = ref(0)
+  const isRunning = ref(false)
+  const status = ref<TimerStatus>('ready')
+  const activeSessionId = ref('')
+  const completedFocusSessions = ref(0)
+  const sessionIndex = ref(0)
+  const sessions = ref<SessionConfig[]>([])
+  const standaloneDuration = ref(0)
+  const completionCount = ref(0)
+  const lastCompletedSession = ref('')
+  const durationSeconds = computed(() => sessions.value[sessionIndex.value]?.durationSeconds ?? standaloneDuration.value)
+  const progress = computed(() => sessionProgress(durationSeconds.value, remainingSeconds.value))
+  let intervalId: ReturnType<typeof setInterval> | undefined
+  let deadline = 0
+  let remainingMilliseconds = 0
 
-  let sessionIndex = initialState?.sessionIndex ?? 0;
-  let intervalId: ReturnType<typeof setInterval> | undefined;
+  function stopClock() {
+    clearInterval(intervalId)
+    intervalId = undefined
+    isRunning.value = false
+  }
+
+  function tick() {
+    const remaining = remainingTime(deadline, Date.now())
+    remainingMilliseconds = remaining.milliseconds
+    remainingSeconds.value = remaining.seconds
+    if (remainingMilliseconds > 0) return
+    stopClock()
+    lastCompletedSession.value = activeSessionId.value || 'focus'
+    completionCount.value++
+    if (sessions.value.length) {
+      const next = completeSession(sessions.value, {
+        sessionIndex: sessionIndex.value,
+        remainingSeconds: 0,
+        completedFocusSessions: completedFocusSessions.value,
+      })
+      sessionIndex.value = next.sessionIndex
+      remainingSeconds.value = next.remainingSeconds
+      completedFocusSessions.value = next.completedFocusSessions
+      activeSessionId.value = sessions.value[next.sessionIndex]!.id
+      remainingMilliseconds = next.remainingSeconds * 1000
+      status.value = 'ready'
+    } else {
+      completedFocusSessions.value++
+      status.value = 'finished'
+    }
+  }
 
   function start() {
-    if (isRunning.value) return;
-    isRunning.value = true;
-    intervalId = setInterval(() => {
-      remainingSeconds.value = decrementTime(remainingSeconds.value, 1);
-
-      if (remainingSeconds.value === 0) {
-        pause();
-
-        if (typeof configuration !== "number") {
-          const nextState = completeSession(configuration, {
-            sessionIndex,
-            remainingSeconds: remainingSeconds.value,
-            completedFocusSessions: completedFocusSessions.value,
-          });
-
-          sessionIndex = nextState.sessionIndex;
-          remainingSeconds.value = nextState.remainingSeconds;
-          completedFocusSessions.value = nextState.completedFocusSessions;
-          activeSessionId.value = configuration[sessionIndex]!.id;
-        }
-      }
-    }, 1000);
+    if (isRunning.value || remainingSeconds.value === 0) return
+    isRunning.value = true
+    status.value = 'running'
+    deadline = Date.now() + remainingMilliseconds
+    intervalId = setInterval(tick, 250)
   }
 
   function pause() {
-    clearInterval(intervalId);
-    intervalId = undefined;
-    isRunning.value = false;
+    if (!isRunning.value) return
+    tick()
+    if (!isRunning.value) return
+    stopClock()
+    status.value = 'paused'
   }
 
   function reset() {
-    pause();
-    remainingSeconds.value =
-      typeof configuration === "number"
-        ? configuration
-        : configuration[sessionIndex]!.durationSeconds;
+    stopClock()
+    remainingSeconds.value = durationSeconds.value
+    remainingMilliseconds = remainingSeconds.value * 1000
+    status.value = 'ready'
   }
 
-  onUnmounted(pause);
+  function configure(configuration: number | readonly SessionConfig[]) {
+    if (typeof configuration === 'number') {
+      if (!Number.isInteger(configuration) || configuration < 1) throw new Error('Duration must be a positive whole number of seconds.')
+    } else validateSessions(configuration)
+    stopClock()
+    sessions.value = typeof configuration === 'number' ? [] : configuration.map(session => ({ ...session }))
+    standaloneDuration.value = typeof configuration === 'number' ? configuration : 0
+    sessionIndex.value = 0
+    completedFocusSessions.value = 0
+    activeSessionId.value = sessions.value[0]?.id ?? ''
+    remainingSeconds.value = typeof configuration === 'number' ? configuration : createSessionState(configuration).remainingSeconds
+    remainingMilliseconds = remainingSeconds.value * 1000
+    lastCompletedSession.value = ''
+    status.value = 'ready'
+  }
 
-  return {
-    remainingSeconds,
-    isRunning,
-    start,
-    pause,
-    reset,
-    activeSessionId,
-    completedFocusSessions,
-  };
+  function selectSession(index: number) {
+    if (!Number.isInteger(index) || !sessions.value[index]) return
+    stopClock()
+    sessionIndex.value = index
+    activeSessionId.value = sessions.value[index]!.id
+    reset()
+  }
+
+  configure(initialConfiguration)
+  onUnmounted(stopClock)
+  return { remainingSeconds, isRunning, status, activeSessionId, completedFocusSessions,
+    start, pause, reset, configure, selectSession, sessionIndex, sessions,
+    durationSeconds, progress, completionCount, lastCompletedSession }
 }
