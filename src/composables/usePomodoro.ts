@@ -4,7 +4,8 @@
 import type { Ref } from "vue";
 import { ref, onUnmounted } from "vue";
 import { decrementTime } from "../domain/timer";
-import { on } from "@primeuix/themes/aura/floatlabel";
+import { createSessionState } from "../domain/pomodoro";
+import type { SessionConfig } from "../domain/pomodoro";
 
 // Minimal contract only: the caller supplies the duration. No clock or state yet.
 export interface PomodoroTimer {
@@ -13,11 +14,27 @@ export interface PomodoroTimer {
   start: () => void;
   pause: () => void;
   reset: () => void;
+  activeSessionId: Ref<string>;
+  completedFocusSessions: Ref<number>;
 }
 
-export function usePomodoro(durationSeconds: number): PomodoroTimer {
+export function usePomodoro(
+  configuration: number | readonly SessionConfig[],
+): PomodoroTimer {
+  const initialState =
+    typeof configuration === "number"
+      ? undefined
+      : createSessionState(configuration);
+  const durationSeconds =
+    typeof configuration === "number"
+      ? configuration
+      : initialState!.remainingSeconds;
   const remainingSeconds = ref(durationSeconds);
   const isRunning = ref(false);
+  const activeSessionId = ref(
+    typeof configuration === "number" ? "" : configuration[0]!.id,
+  );
+  const completedFocusSessions = ref(initialState?.completedFocusSessions ?? 0);
 
   let intervalId: ReturnType<typeof setInterval> | undefined;
 
@@ -52,5 +69,7 @@ export function usePomodoro(durationSeconds: number): PomodoroTimer {
     start,
     pause,
     reset,
+    activeSessionId,
+    completedFocusSessions,
   };
 }
