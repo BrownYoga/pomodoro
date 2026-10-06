@@ -9,14 +9,21 @@ export interface TimerSettings {
   soundEnabled: boolean
 }
 
-// Preserve the learning timer until the user chooses a session configuration.
+// Standard Pomodoro defaults; every setting remains editable.
 export const defaultSettings: TimerSettings = {
-  focusSeconds: 65,
+  focusSeconds: 1500,
   restSeconds: 300,
   longRestSeconds: 900,
-  longRestEvery: 0,
-  breaksEnabled: false,
+  longRestEvery: 4,
+  breaksEnabled: true,
   soundEnabled: false,
+}
+
+/** Upgrade only the exact old starter configuration, preserving sound preference. */
+export function upgradeStarterSettings(settings: TimerSettings): TimerSettings {
+  const isStarter = settings.focusSeconds === 65 && settings.restSeconds === 300 &&
+    settings.longRestSeconds === 900 && settings.longRestEvery === 0 && !settings.breaksEnabled
+  return isStarter ? { ...defaultSettings, soundEnabled: settings.soundEnabled } : settings
 }
 
 export function validateSettings(settings: TimerSettings): string | null {

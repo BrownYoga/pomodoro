@@ -29,13 +29,15 @@ Open the local URL printed by Vite. Start, pause, resume, or reset the current
 session. The progress ring, page title, and status follow the timer. You can
 write a focus intention and see completed focus sessions for this visit.
 
-The starting timer remains the 65-second example from the learning project.
+The defaults are 25-minute focus sessions, 5-minute rests, and a 15-minute long
+rest after four focus sessions. The old 65-second starter settings automatically
+upgrade; custom settings are preserved.
 Open Settings to choose a focus duration and enable alternating rest sessions.
 Durations are entered in minutes (enter 25 for a 25-minute session). Decimals
 are supported, such as 0.5 for 30 seconds; the timer stores whole seconds internally.
 Long rests are
 optional: choose a frequency from 1 to 12, or 0 to disable them. No fixed
-four-session rule is imposed. You can select Focus, Rest, or Long rest directly;
+four-session rule is required: the default frequency is editable. You can select Focus, Rest, or Long rest directly;
 switching stops and resets that session without counting it as a completion.
 
 Each completed session prepares the next one but waits for Start. Reset restores

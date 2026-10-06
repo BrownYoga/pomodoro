@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import { defaultSettings, validateSettings } from '../domain/settings'
+import { defaultSettings, validateSettings, upgradeStarterSettings } from '../domain/settings'
 import type { TimerSettings } from '../domain/settings'
 
 const storageKey = 'pomodoro-settings-v1'
@@ -12,7 +12,7 @@ export function useSettings() {
       const parsed: unknown = JSON.parse(saved)
       if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
         const candidate = { ...defaultSettings, ...parsed } as TimerSettings
-        if (!validateSettings(candidate)) initial = candidate
+        if (!validateSettings(candidate)) initial = upgradeStarterSettings(candidate)
       }
     }
   } catch { /* Storage may be unavailable; the timer still works. */ }

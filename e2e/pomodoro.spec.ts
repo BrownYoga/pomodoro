@@ -50,25 +50,25 @@ test('shows Ready, Running, Paused, and Ready after reset', async ({ page }) => 
 test('counts down, pauses, resumes, and resets the displayed time', async ({ page }) => {
   const display = page.getByTestId('timer-display')
 
-  // The current App.vue supplies a 65-second example, not a Pomodoro default.
-  await expect(display).toHaveText('01:05')
+  // The default focus session is 25 minutes.
+  await expect(display).toHaveText('25:00')
   await page.getByTestId('start-button').click()
   await page.clock.runFor(1000)
-  await expect(display).toHaveText('01:04')
+  await expect(display).toHaveText('24:59')
 
   await page.getByTestId('pause-button').click()
   await page.clock.runFor(3000)
-  await expect(display).toHaveText('01:04')
+  await expect(display).toHaveText('24:59')
 
   await page.getByTestId('start-button').click()
   await page.clock.runFor(1000)
-  await expect(display).toHaveText('01:03')
+  await expect(display).toHaveText('24:58')
 
   await page.getByTestId('reset-button').click()
-  await expect(display).toHaveText('01:05')
+  await expect(display).toHaveText('25:00')
   await expect(page.getByTestId('start-button')).toBeEnabled()
   await page.clock.runFor(2000)
-  await expect(display).toHaveText('01:05')
+  await expect(display).toHaveText('25:00')
 })
 
 test('saves custom durations, transitions to rest, and preserves the count on reset', async ({ page }) => {
@@ -103,7 +103,7 @@ test('rejects invalid settings without changing the timer and supports cancellin
   await page.getByTestId('focus-duration').fill('0')
   await page.getByTestId('save-settings').click()
   await expect(page.getByTestId('settings-error')).toContainText('minutes')
-  await expect(page.getByTestId('timer-display')).toHaveText('01:05')
+  await expect(page.getByTestId('timer-display')).toHaveText('25:00')
   await page.keyboard.press('Escape')
   await expect(page.getByTestId('settings-dialog')).not.toBeVisible()
   await expect(page.getByTestId('open-settings')).toBeFocused()
@@ -124,15 +124,33 @@ test('accepts minutes and restores them when reopening settings', async ({ page 
 })
 
 test('finishes the standalone timer and can reset for another round', async ({ page }) => {
+  await page.getByTestId('open-settings').click()
+  await page.getByTestId('focus-duration').fill('1')
+  await page.getByTestId('enable-breaks').uncheck()
+  await page.getByTestId('save-settings').click()
   await page.getByTestId('start-button').click()
-  await page.clock.runFor(65000)
+  await page.clock.runFor(60000)
   await expect(page.getByTestId('timer-display')).toHaveText('00:00')
   await expect(page.getByTestId('timer-status')).toHaveText('Finished')
   await expect(page.getByTestId('start-button')).toBeDisabled()
   await expect(page.getByTestId('completed-count')).toHaveText('1')
   await page.getByTestId('reset-button').click()
   await expect(page.getByTestId('timer-status')).toHaveText('Ready')
-  await expect(page.getByTestId('timer-display')).toHaveText('01:05')
+  await expect(page.getByTestId('timer-display')).toHaveText('01:00')
+})
+
+test('upgrades saved starter defaults to a normal Pomodoro', async ({ page }) => {
+  await page.evaluate(() => localStorage.setItem('pomodoro-settings-v1', JSON.stringify({
+    focusSeconds: 65, restSeconds: 300, longRestSeconds: 900,
+    longRestEvery: 0, breaksEnabled: false, soundEnabled: false,
+  })))
+  await page.reload()
+  await expect(page.getByTestId('timer-display')).toHaveText('25:00')
+  await expect(page.getByTestId('mode-rest')).toBeVisible()
+  await expect(page.getByTestId('mode-long-rest')).toBeVisible()
+  await page.getByTestId('open-settings').click()
+  await expect(page.getByTestId('focus-duration')).toHaveValue('25')
+  await expect(page.getByTestId('long-rest-frequency')).toHaveValue('4')
 })
 
 test('takes a long rest at the configured frequency and switching modes does not count a completion', async ({ page }) => {
@@ -158,7 +176,7 @@ test('supports keyboard shortcuts without intercepting typing', async ({ page })
   await page.locator('body').click({ position: { x: 5, y: 5 } })
   await page.keyboard.press('Space')
   await page.clock.runFor(1000)
-  await expect(page.getByTestId('timer-display')).toHaveText('01:04')
+  await expect(page.getByTestId('timer-display')).toHaveText('24:59')
   await page.keyboard.press('Space')
   await expect(page.getByTestId('timer-status')).toHaveText('Paused')
   await page.keyboard.press('r')
@@ -171,7 +189,7 @@ test('supports keyboard shortcuts without intercepting typing', async ({ page })
 test('handles unavailable or corrupted saved settings', async ({ page }) => {
   await page.evaluate(() => localStorage.setItem('pomodoro-settings-v1', '{broken'))
   await page.reload()
-  await expect(page.getByTestId('timer-display')).toHaveText('01:05')
+  await expect(page.getByTestId('timer-display')).toHaveText('25:00')
   await page.evaluate(() => {
     Storage.prototype.setItem = () => { throw new Error('Storage unavailable') }
   })
@@ -188,7 +206,7 @@ test('applying settings stops the previous clock, while cancelling preserves it'
   await page.getByTestId('focus-duration').fill('12')
   await page.keyboard.press('Escape')
   await page.clock.runFor(1000)
-  await expect(page.getByTestId('timer-display')).toHaveText('01:04')
+  await expect(page.getByTestId('timer-display')).toHaveText('24:59')
   await page.getByTestId('open-settings').click()
   await page.getByTestId('focus-duration').fill('12')
   await page.getByTestId('save-settings').click()
