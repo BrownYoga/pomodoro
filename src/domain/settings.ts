@@ -19,6 +19,11 @@ export const defaultSettings: TimerSettings = {
   soundEnabled: false,
 }
 
+export function timerConfigurationChanged(current: TimerSettings, next: TimerSettings): boolean {
+  return (['focusSeconds', 'restSeconds', 'longRestSeconds', 'longRestEvery', 'breaksEnabled'] as const)
+    .some(key => current[key] !== next[key])
+}
+
 /** Upgrade only the exact old starter configuration, preserving sound preference. */
 export function upgradeStarterSettings(settings: TimerSettings): TimerSettings {
   const isStarter = settings.focusSeconds === 65 && settings.restSeconds === 300 &&

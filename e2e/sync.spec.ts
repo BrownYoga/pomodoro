@@ -103,6 +103,23 @@ test('loads shared account timers on sign-in and reload, with no background poll
     await phone.reload()
     await expect(phone.getByTestId('session-label')).toHaveText('Rest session')
     await expect(phone.getByTestId('completed-count')).toHaveText('1')
+    // Sound is an account preference, not a timer configuration change.
+    await phone.getByTestId('start-button').click()
+    await expect(phone.getByTestId('timer-status')).toHaveText('Running')
+    await advance([phone], 3000)
+    await phone.getByTestId('open-settings').click()
+    await phone.getByTestId('enable-sound').check()
+    await phone.getByTestId('save-settings').click()
+    await expect(phone.getByTestId('settings-dialog')).not.toBeVisible()
+    await expect(phone.getByTestId('timer-status')).toHaveText('Running')
+    await expect(phone.getByTestId('timer-display')).toHaveText('04:57')
+    await expect(phone.getByTestId('completed-count')).toHaveText('1')
+    // A fresh signed-in device loads the preference from the account.
+    const nextLogin = await device(browser, 'ash')
+    await expect(nextLogin.getByTestId('session-label')).toHaveText('Rest session')
+    await expect(nextLogin.getByTestId('timer-display')).toHaveText('04:57')
+    await nextLogin.getByTestId('open-settings').click()
+    await expect(nextLogin.getByTestId('enable-sound')).toBeChecked()
   } finally {
     await Promise.all(contexts.map(context => context.close()))
   }

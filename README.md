@@ -41,8 +41,11 @@ four-session rule is required: the default frequency is editable. You can select
 switching stops and resets that session without counting it as a completion.
 
 Each completed session prepares the next one but waits for Start. Reset restores
-the current session and preserves the completed count. Saving settings starts a
-fresh sequence and clears the count. A standalone focus timer stops at zero;
+the current session and preserves the completed count. Changing timer durations
+or the session sequence starts a fresh sequence and clears the count. Changing
+only completion sound preserves the current session, countdown, and completed count.
+The sound preference is saved to your account when signed in, or in this browser
+for guests. A standalone focus timer stops at zero;
 Reset makes it ready again.
 
 Guest settings are saved in this browser. Reloading as a guest starts a fresh timer and clears

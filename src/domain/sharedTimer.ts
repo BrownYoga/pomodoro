@@ -1,4 +1,4 @@
-import { buildConfiguration, defaultSettings, validateSettings } from './settings'
+import { buildConfiguration, defaultSettings, timerConfigurationChanged, validateSettings } from './settings'
 import type { TimerSettings } from './settings'
 import { completeSession } from './pomodoro'
 
@@ -55,8 +55,10 @@ export function applyTimerCommand(input: SharedTimerState, command: TimerCommand
         remainingMilliseconds: configuration[command.index]!.durationSeconds * 1000 }
     }
     case 'configure':
-      if (!command.settings) throw new Error('Invalid settings')
-      return freshTimer(command.settings)
+      if (!command.settings || validateSettings(command.settings)) throw new Error('Invalid settings')
+      return timerConfigurationChanged(state.settings, command.settings)
+        ? freshTimer(command.settings)
+        : { ...state, settings: { ...command.settings } }
     default: throw new Error('Invalid command')
   }
 }

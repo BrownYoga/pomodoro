@@ -3,6 +3,13 @@ import { applyTimerCommand, freshTimer, isSharedTimerState, reconcileTimer } fro
 import { defaultSettings } from '../../domain/settings'
 
 describe('shared timer rules', () => {
+  it.each(['running', 'paused', 'finished'] as const)('preserves a %s timer when only sound changes', status => {
+    const state = { ...freshTimer(), status, sessionIndex: 2, completedFocusSessions: 3,
+      remainingMilliseconds: status === 'finished' ? 0 : 123456,
+      endsAt: status === 'running' ? 200000 : null }
+    const settings = { ...state.settings, soundEnabled: true }
+    expect(applyTimerCommand(state, { type: 'configure', settings }, 1000)).toEqual({ ...state, settings })
+  })
   it('stores a deadline and preserves fractional seconds through pause and resume', () => {
     const started = applyTimerCommand(freshTimer(), { type: 'start' }, 1000)
     expect(started.endsAt).toBe(1501000)

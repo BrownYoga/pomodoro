@@ -6,7 +6,7 @@ import TimerSettings from "./components/TimerSettings.vue";
 import AccountMenu from "./components/AccountMenu.vue";
 import LofiPlayer from "./components/LofiPlayer.vue";
 import { formatTime } from "./domain/timer";
-import { buildConfiguration } from "./domain/settings";
+import { buildConfiguration, timerConfigurationChanged } from "./domain/settings";
 import type { TimerSettings as Settings } from "./domain/settings";
 import { usePomodoro } from "./composables/usePomodoro";
 import { useSettings } from "./composables/useSettings";
@@ -106,13 +106,18 @@ async function closeSettings() {
   settingsButton.value?.focus();
 }
 async function applySettings(next: Settings) {
+  const configurationChanged = timerConfigurationChanged(settings.value, next);
+  // Unlock during the Save gesture, including when enabling sound mid-session.
+  if (next.soundEnabled) void sound.unlock();
   if (auth.user.value) {
     if (!await sync.request({ type: "configure", settings: next })) return;
   } else {
     save(next);
-    timer.configure(buildConfiguration(next));
+    if (configurationChanged) timer.configure(buildConfiguration(next));
   }
-  announcement.value = "Settings saved. Your new timer is ready.";
+  announcement.value = configurationChanged
+    ? "Settings saved. Your new timer is ready."
+    : "Settings saved.";
   void closeSettings();
 }
 watch(timer.completionCount, () => {
