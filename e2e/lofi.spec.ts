@@ -68,6 +68,16 @@ test('keeps the mobile player visible at YouTube minimum dimensions', async ({ p
   expect(bounds!.width).toBeGreaterThanOrEqual(200)
   expect(bounds!.height).toBeGreaterThanOrEqual(200)
   await expect(frame).toBeInViewport()
+  // Hit-test the actual iframe, including its edges, to catch app controls
+  // covering the video or YouTube's own controls.
+  expect(await frame.evaluate((element) => {
+    const bounds = element.getBoundingClientRect()
+    return [1, bounds.width / 2, bounds.width - 1].every(x =>
+      [1, bounds.height / 2, bounds.height - 1].every(y =>
+        document.elementFromPoint(bounds.left + x, bounds.top + y) === element,
+      ),
+    )
+  })).toBe(true)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   await page.screenshot({ path: 'test-results/lofi-mobile.png', fullPage: true })
 })
