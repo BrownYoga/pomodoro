@@ -53,7 +53,7 @@ settings through Netlify Database.
 
 ## Optional study music
 
-Use **Play Lo-fi** in the bottom-right corner to open Lofi Girl's official YouTube
+Use **Play Lo-fi** in the bottom-left corner to open Lofi Girl's official YouTube
 study radio. Nothing from YouTube loads until you choose music. Pause/resume and
 volume affect music only; stopping closes and destroys the player. Timer controls,
 settings, account changes and session completion do not control music.

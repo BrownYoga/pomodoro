@@ -43,7 +43,7 @@ async function close() {
 </template>
 
 <style scoped>
-.lofi { position: fixed; right: max(1rem, env(safe-area-inset-right)); bottom: max(1rem, env(safe-area-inset-bottom)); z-index: 10; display: flex; flex-direction: column; align-items: flex-end; gap: .65rem; }
+.lofi { position: fixed; left: max(1rem, env(safe-area-inset-left)); bottom: max(1rem, env(safe-area-inset-bottom)); z-index: 10; display: flex; flex-direction: column; align-items: flex-start; gap: .65rem; }
 .lofi-toggle, .lofi-panel { background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-muted); border-radius: .9rem; }
 .lofi-toggle { padding: .75rem 1rem; font-size: .8rem; display: flex; gap: .6rem; align-items: center; }
 .lofi-toggle:hover, .lofi-heading button:hover { color: var(--color-lime); }
