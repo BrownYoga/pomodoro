@@ -4,7 +4,7 @@ import { validateSettings } from '../domain/settings'
 import type { TimerSettings } from '../domain/settings'
 
 const props = defineProps<{ settings: TimerSettings }>()
-const emit = defineEmits<{ save: [settings: TimerSettings]; cancel: [] }>()
+const emit = defineEmits<{ save: [settings: TimerSettings]; cancel: []; testSound: [] }>()
 const draft = reactive({ ...props.settings })
 const minutes = reactive({
   focus: Number((props.settings.focusSeconds / 60).toFixed(4)),
@@ -45,8 +45,11 @@ function submit() {
         <label>Long rest duration <span>minutes</span><input v-model.number="minutes.longRest" data-testid="long-rest-duration" type="number" min="0.0167" max="120" step="any" /></label>
         <label>Long rest after <span>focus sessions · 0 disables</span><input v-model.number="draft.longRestEvery" data-testid="long-rest-frequency" type="number" min="0" max="12" step="1" /></label>
       </fieldset>
-      <label class="toggle"><input v-model="draft.soundEnabled" data-testid="enable-sound" type="checkbox" /> Play a gentle sound on completion</label>
-      <p class="hint">Each next session waits for you to press Start.</p>
+      <div class="sound-controls">
+        <label class="toggle"><input v-model="draft.soundEnabled" data-testid="enable-sound" type="checkbox" /> Gong after focus and rest</label>
+        <button type="button" data-testid="test-sound" @click="emit('testSound')">Test gong</button>
+      </div>
+      <p class="hint">Runs automatically through long rest, then waits for Start next session.</p>
       <p class="hint">Decimals work too: 0.5 minutes is 30 seconds.</p>
       <p v-if="error" class="error" role="alert" data-testid="settings-error">{{ error }}</p>
       <div class="actions"><button type="button" class="secondary" @click="emit('cancel')">Cancel</button><button type="submit" data-testid="save-settings">Save settings</button></div>
@@ -66,6 +69,9 @@ label { display: grid; grid-template-columns: 1fr auto; gap: .5rem; margin: 1rem
 label span { color: var(--color-muted); font-size: .75rem; }
 input[type='number'] { grid-column: 1 / -1; width: 100%; border: 1px solid var(--color-border); border-radius: .65rem; background: var(--color-background); color: var(--color-lime); padding: .75rem; font: inherit; }
 .toggle { display: flex; align-items: center; gap: .75rem; }
+.sound-controls { display: flex; align-items: center; gap: .75rem; }
+.sound-controls .toggle { flex: 1; min-width: 0; }
+.sound-controls button, input[type='checkbox'] { flex-shrink: 0; }
 input[type='checkbox'] { accent-color: var(--color-mint); width: 1rem; height: 1rem; }
 fieldset { border: 0; padding: 0; margin: 0; &:disabled { opacity: .45; } }
 .actions { display: flex; justify-content: flex-end; gap: .75rem; margin-top: 1.5rem; }

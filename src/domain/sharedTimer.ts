@@ -1,6 +1,6 @@
 import { buildConfiguration, defaultSettings, timerConfigurationChanged, validateSettings } from './settings'
 import type { TimerSettings } from './settings'
-import { completeSession } from './pomodoro'
+import { advanceSequence } from './pomodoro'
 
 export interface SharedTimerState {
   settings: TimerSettings
@@ -10,7 +10,7 @@ export interface SharedTimerState {
   status: 'ready' | 'running' | 'paused' | 'finished'
   completedFocusSessions: number
 }
-export type TimerCommand = { type: 'start' | 'pause' | 'reset' } |
+export type TimerCommand = { type: 'start' | 'pause' | 'reset' | 'skip-break' } |
   { type: 'select'; index: number } | { type: 'configure'; settings: TimerSettings }
 export interface SharedTimerResponse { state: SharedTimerState; revision: number; serverNow: number }
 
@@ -31,10 +31,12 @@ export function reconcileTimer(state: SharedTimerState, now: number): SharedTime
   if (typeof configuration === 'number') {
     return { ...state, endsAt: null, remainingMilliseconds: 0, status: 'finished', completedFocusSessions: state.completedFocusSessions + 1 }
   }
-  const next = completeSession(configuration, { sessionIndex: state.sessionIndex, remainingSeconds: 0,
-    completedFocusSessions: state.completedFocusSessions })
-  return { ...state, sessionIndex: next.sessionIndex, remainingMilliseconds: next.remainingSeconds * 1000,
-    completedFocusSessions: next.completedFocusSessions, endsAt: null, status: 'ready' }
+  const next = advanceSequence(configuration, { sessionIndex: state.sessionIndex, remainingSeconds: 0,
+    completedFocusSessions: state.completedFocusSessions }, state.endsAt, now)
+  return { ...state, sessionIndex: next.sessionIndex,
+    remainingMilliseconds: next.endsAt === null ? next.remainingSeconds * 1000 : next.endsAt - now,
+    completedFocusSessions: next.completedFocusSessions, endsAt: next.endsAt,
+    status: next.endsAt === null ? 'finished' : 'running' }
 }
 
 export function applyTimerCommand(input: SharedTimerState, command: TimerCommand, now: number): SharedTimerState {
@@ -48,6 +50,16 @@ export function applyTimerCommand(input: SharedTimerState, command: TimerCommand
         remainingMilliseconds: Math.max(0, state.endsAt! - now) } : state
     case 'reset':
       return { ...state, status: 'ready', endsAt: null, remainingMilliseconds: currentDuration(state) * 1000 }
+    case 'skip-break': {
+      const configuration = buildConfiguration(state.settings)
+      if (typeof configuration === 'number' || configuration[state.sessionIndex]!.countsAsFocus) return state
+      const finished = configuration[state.sessionIndex]!.id === 'long-rest'
+      const sessionIndex = (state.sessionIndex + 1) % configuration.length
+      const remainingMilliseconds = configuration[sessionIndex]!.durationSeconds * 1000
+      const status = finished ? 'finished' : state.status
+      return { ...state, sessionIndex, remainingMilliseconds, status,
+        endsAt: status === 'running' ? now + remainingMilliseconds : null }
+    }
     case 'select': {
       const configuration = buildConfiguration(state.settings)
       if (typeof configuration === 'number' || !Number.isInteger(command.index) || !configuration[command.index]) throw new Error('Invalid session')

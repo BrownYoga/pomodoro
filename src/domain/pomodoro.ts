@@ -34,3 +34,29 @@ export function completeSession(sessions: readonly SessionConfig[], state: Sessi
     completedFocusSessions: state.completedFocusSessions + (finishedSession.countsAsFocus ? 1 : 0),
   }
 }
+
+/** Keep deadlines anchored to elapsed time, stopping after the long rest. */
+export function advanceSequence(sessions: readonly SessionConfig[], state: SessionState, endsAt: number, now: number) {
+  let next = state
+  let completed = 0
+  let lastCompletedSession = ''
+  while (endsAt <= now) {
+    lastCompletedSession = sessions[next.sessionIndex]!.id
+    next = completeSession(sessions, next)
+    completed++
+    if (lastCompletedSession === 'long-rest') {
+      return { ...next, endsAt: null, completed, lastCompletedSession }
+    }
+    // Without long rests the sequence repeats indefinitely. Skip whole cycles
+    // after wrapping so a long absence does not require one loop per period.
+    if (next.sessionIndex === 0 && !sessions.some(session => session.id === 'long-rest')) {
+      const cycleMilliseconds = sessions.reduce((sum, session) => sum + session.durationSeconds * 1000, 0)
+      const cycles = Math.floor((now - endsAt) / cycleMilliseconds)
+      next = { ...next, completedFocusSessions: next.completedFocusSessions + cycles * sessions.filter(session => session.countsAsFocus).length }
+      completed += cycles * sessions.length
+      endsAt += cycles * cycleMilliseconds
+    }
+    endsAt += next.remainingSeconds * 1000
+  }
+  return { ...next, endsAt, completed, lastCompletedSession }
+}

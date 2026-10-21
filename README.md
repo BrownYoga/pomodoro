@@ -40,7 +40,12 @@ optional: choose a frequency from 1 to 12, or 0 to disable them. No fixed
 four-session rule is required: the default frequency is editable. You can select Focus, Rest, or Long rest directly;
 switching stops and resets that session without counting it as a completion.
 
-Each completed session prepares the next one but waits for Start. Reset restores
+After Start, focus and rest periods advance automatically through the long rest.
+Finishing the long rest stops the cycle and offers **Start next session**.
+**Skip break** skips a short rest straight to focus, preserving running or paused
+state; skipping the long rest ends the cycle. Focus periods cannot be skipped
+with this control. With long rests disabled, focus and short rests keep alternating
+until paused or reset. Reset restores
 the current session and preserves the completed count. Changing timer durations
 or the session sequence starts a fresh sequence and clears the count. Changing
 only completion sound preserves the current session, countdown, and completed count.
@@ -117,8 +122,9 @@ already open keeps its local countdown until it reloads or sends an action. If
 another device changed the timer, a stale action loads the latest state and asks
 you to try the action again. A saved finish
 timestamp keeps the countdown correct after reloads or closing the app, even if
-the devices have different system clocks. The next session waits for Start.
-Expired sessions are reconciled by the server once, without a background worker.
+the devices have different system clocks. Elapsed focus and rest periods advance
+through the long rest, then wait for **Start next session**. Expired periods are
+reconciled by the server without a background worker.
 
 The Netlify Function at `/.netlify/functions/timer` verifies Identity on the
 server and chooses the database row from the verified user ID. POST requests
@@ -142,7 +148,9 @@ Database setup: [Netlify Database getting started](https://docs.netlify.com/buil
 
 Setup reference: [Netlify Identity](https://docs.netlify.com/manage/security/secure-access-to-sites/identity/get-started/).
 
-Enable completion sound in Settings for a short chime. Audio is activated when
+Enable completion sound in Settings for a louder gong after each focus or rest
+period. Use **Test gong** to preview it at your device's current volume without
+changing your saved preference. Sound is off by default. Audio is activated when
 you press Start and depends on the browser allowing audio playback. The app also
 shows a completion message. While the page is active, Space toggles start/pause
 and R resets; shortcuts do not intercept typing or button activation.

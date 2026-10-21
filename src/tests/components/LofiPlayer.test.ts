@@ -117,7 +117,6 @@ describe('optional lo-fi player', () => {
     events.onError({ data: 101 })
     await flushPromises()
     expect(wrapper.text()).toContain('cannot be played here')
-    await wrapper.get('[data-testid="start-button"]').trigger('click')
     await vi.advanceTimersByTimeAsync(1000)
     expect(wrapper.get('[data-testid="timer-display"]').text()).toBe('04:59')
   })

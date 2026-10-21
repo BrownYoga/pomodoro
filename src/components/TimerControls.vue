@@ -1,12 +1,13 @@
 ﻿<script setup lang="ts">
-defineProps<{ isRunning: boolean; finished?: boolean; paused?: boolean }>()
-defineEmits<{ start: []; pause: []; reset: [] }>()
+defineProps<{ isRunning: boolean; finished?: boolean; paused?: boolean; nextSession?: boolean; canSkipBreak?: boolean }>()
+defineEmits<{ start: []; pause: []; reset: []; skipBreak: [] }>()
 </script>
 
 <template>
   <div class="controls">
-    <button v-if="!isRunning" class="primary" data-testid="start-button" :disabled="finished" @click="$emit('start')">{{ paused ? 'Resume' : 'Start' }} <span aria-hidden="true">▶</span></button>
+    <button v-if="!isRunning" class="primary" data-testid="start-button" :disabled="finished && !nextSession" @click="$emit('start')">{{ nextSession ? 'Start next session' : paused ? 'Resume' : 'Start' }} <span aria-hidden="true">▶</span></button>
     <button v-else class="primary running" data-testid="pause-button" @click="$emit('pause')">Pause <span aria-hidden="true">Ⅱ</span></button>
+    <button v-if="canSkipBreak" class="reset" data-testid="skip-break-button" @click="$emit('skipBreak')">Skip break</button>
     <button class="reset" data-testid="reset-button" @click="$emit('reset')">Reset <span aria-hidden="true">↺</span></button>
   </div>
 </template>

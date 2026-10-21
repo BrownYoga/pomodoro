@@ -1,6 +1,6 @@
 ﻿import { computed, onUnmounted, ref } from 'vue'
 import type { Ref } from 'vue'
-import { createSessionState, completeSession, validateSessions } from '../domain/pomodoro'
+import { createSessionState, advanceSequence, validateSessions } from '../domain/pomodoro'
 import type { SessionConfig } from '../domain/pomodoro'
 import { remainingTime, sessionProgress } from '../domain/timer'
 import type { SharedTimerState } from '../domain/sharedTimer'
@@ -46,22 +46,29 @@ export function usePomodoro(initialConfiguration: number | readonly SessionConfi
     remainingMilliseconds = remaining.milliseconds
     remainingSeconds.value = remaining.seconds
     if (remainingMilliseconds > 0) return
-    stopClock()
-    lastCompletedSession.value = activeSessionId.value || 'focus'
-    completionCount.value++
     if (sessions.value.length) {
-      const next = completeSession(sessions.value, {
-        sessionIndex: sessionIndex.value,
-        remainingSeconds: 0,
+      const next = advanceSequence(sessions.value, {
+        sessionIndex: sessionIndex.value, remainingSeconds: 0,
         completedFocusSessions: completedFocusSessions.value,
-      })
+      }, deadline, Date.now())
+      lastCompletedSession.value = next.lastCompletedSession
+      completionCount.value += next.completed
       sessionIndex.value = next.sessionIndex
-      remainingSeconds.value = next.remainingSeconds
       completedFocusSessions.value = next.completedFocusSessions
       activeSessionId.value = sessions.value[next.sessionIndex]!.id
-      remainingMilliseconds = next.remainingSeconds * 1000
-      status.value = 'ready'
+      if (next.endsAt === null) {
+        stopClock()
+        remainingMilliseconds = next.remainingSeconds * 1000
+        status.value = 'finished'
+      } else {
+        deadline = next.endsAt
+        remainingMilliseconds = deadline - Date.now()
+      }
+      remainingSeconds.value = Math.ceil(remainingMilliseconds / 1000)
     } else {
+      stopClock()
+      lastCompletedSession.value = 'focus'
+      completionCount.value++
       completedFocusSessions.value++
       status.value = 'finished'
     }
@@ -114,6 +121,20 @@ export function usePomodoro(initialConfiguration: number | readonly SessionConfi
     reset()
   }
 
+  function skipBreak() {
+    if (isRunning.value) tick()
+    const session = sessions.value[sessionIndex.value]
+    if (!session || session.countsAsFocus) return
+    const previousStatus = status.value
+    stopClock()
+    sessionIndex.value = (sessionIndex.value + 1) % sessions.value.length
+    activeSessionId.value = sessions.value[sessionIndex.value]!.id
+    remainingSeconds.value = durationSeconds.value
+    remainingMilliseconds = remainingSeconds.value * 1000
+    status.value = session.id === 'long-rest' ? 'finished' : previousStatus
+    if (status.value === 'running') start()
+  }
+
   function restore(state: SharedTimerState, serverNow: number) {
     configure(buildConfiguration(state.settings))
     sessionIndex.value = state.sessionIndex
@@ -125,7 +146,7 @@ export function usePomodoro(initialConfiguration: number | readonly SessionConfi
     remainingSeconds.value = Math.ceil(remainingMilliseconds / 1000)
     if (state.status === 'running') {
       isRunning.value = true
-      deadline = Date.now() + remainingMilliseconds
+      deadline = Date.now() + state.endsAt! - serverNow
       intervalId = setInterval(tick, 250)
       tick()
     }
@@ -135,5 +156,5 @@ export function usePomodoro(initialConfiguration: number | readonly SessionConfi
   onUnmounted(stopClock)
   return { remainingSeconds, isRunning, status, activeSessionId, completedFocusSessions,
     start, pause, reset, configure, selectSession, sessionIndex, sessions,
-    durationSeconds, progress, completionCount, lastCompletedSession, restore }
+    durationSeconds, progress, completionCount, lastCompletedSession, restore, skipBreak }
 }

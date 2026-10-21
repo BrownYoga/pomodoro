@@ -130,16 +130,16 @@ describe('usePomodoro', () => {
     expect(timer.completedFocusSessions.value).toBe(0)
   })
 
-  it('prepares the next configured session and counts a completed focus', async () => {
+  it('automatically starts the next configured session and counts a completed focus', async () => {
     const timer = mountTimer(sessions)
     timer.start()
     await vi.advanceTimersByTimeAsync(10000)
     expect(timer.activeSessionId.value).toBe('rest')
     expect(timer.remainingSeconds.value).toBe(3)
     expect(timer.completedFocusSessions.value).toBe(1)
-    expect(timer.isRunning.value).toBe(false)
+    expect(timer.isRunning.value).toBe(true)
     await vi.advanceTimersByTimeAsync(2000)
-    expect(timer.remainingSeconds.value).toBe(3)
+    expect(timer.remainingSeconds.value).toBe(1)
   })
 
   it('does not count a completed rest as focus and wraps the configured sequence', async () => {
@@ -151,7 +151,7 @@ describe('usePomodoro', () => {
     expect(timer.activeSessionId.value).toBe('work')
     expect(timer.remainingSeconds.value).toBe(10)
     expect(timer.completedFocusSessions.value).toBe(1)
-    expect(timer.isRunning.value).toBe(false)
+    expect(timer.isRunning.value).toBe(true)
   })
 
   it('resets the current configured session without erasing completed focus count', async () => {
@@ -175,6 +175,36 @@ describe('usePomodoro', () => {
     wrapper = undefined
     expect(vi.getTimerCount()).toBe(0)
     await vi.advanceTimersByTimeAsync(2000)
+    expect(timer.remainingSeconds.value).toBe(9)
+  })
+
+  it('catches up a delayed clock through long rest and waits for the next start', async () => {
+    const timer = mountTimer([...sessions, { id: 'long-rest', durationSeconds: 2, countsAsFocus: false }])
+    timer.start()
+    vi.setSystemTime(Date.now() + 60000)
+    await vi.advanceTimersByTimeAsync(250)
+    expect(timer.status.value).toBe('finished')
+    expect(timer.activeSessionId.value).toBe('work')
+    expect(timer.remainingSeconds.value).toBe(10)
+    expect(timer.completedFocusSessions.value).toBe(1)
+    expect(vi.getTimerCount()).toBe(0)
+    timer.start()
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(timer.remainingSeconds.value).toBe(9)
+  })
+
+  it('skips a running break without adding a focus completion', async () => {
+    const timer = mountTimer(sessions)
+    timer.start()
+    timer.skipBreak()
+    expect(timer.activeSessionId.value).toBe('work')
+    await vi.advanceTimersByTimeAsync(10000)
+    timer.skipBreak()
+    expect(timer.activeSessionId.value).toBe('work')
+    expect(timer.completedFocusSessions.value).toBe(1)
+    expect(timer.isRunning.value).toBe(true)
+    expect(vi.getTimerCount()).toBe(1)
+    await vi.advanceTimersByTimeAsync(1000)
     expect(timer.remainingSeconds.value).toBe(9)
   })
 

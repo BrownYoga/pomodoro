@@ -60,7 +60,7 @@ describe('authenticated timer API against PostgreSQL', () => {
     await handler(request())
     const started = await (await handler(request({ type: 'configure', settings: { ...defaultSettings, focusSeconds: 1 } }))).json()
     const running = await (await handler(request({ type: 'start' }, started.revision))).json()
-    await db.query('UPDATE pomodoro_timers SET state = jsonb_set(state, \'{endsAt}\', \'0\') WHERE user_id = $1', ['alice'])
+    await db.query('UPDATE pomodoro_timers SET state = jsonb_set(state, \'{endsAt}\', $2::jsonb) WHERE user_id = $1', ['alice', JSON.stringify(Date.now() - 1000)])
     const responses = await Promise.all([handler(request()), handler(request())])
     for (const response of responses) {
       const data = await response.json()

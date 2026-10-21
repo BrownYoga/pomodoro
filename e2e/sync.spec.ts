@@ -104,7 +104,6 @@ test('loads shared account timers on sign-in and reload, with no background poll
     await expect(phone.getByTestId('session-label')).toHaveText('Rest session')
     await expect(phone.getByTestId('completed-count')).toHaveText('1')
     // Sound is an account preference, not a timer configuration change.
-    await phone.getByTestId('start-button').click()
     await expect(phone.getByTestId('timer-status')).toHaveText('Running')
     await advance([phone], 3000)
     await phone.getByTestId('open-settings').click()

@@ -68,7 +68,9 @@ const modes = computed(() => {
 });
 const sessionHint = computed(() =>
   status.value === "finished"
-    ? "Well done. Reset when you’re ready for another round."
+    ? sessions.value.length
+      ? "Well done. Start your next session when you’re ready."
+      : "Well done. Reset when you’re ready for another round."
     : isRest.value
       ? "Step away. Breathe. This time is yours."
       : status.value === "paused"
@@ -91,6 +93,11 @@ function reset() {
   if (auth.user.value) void sync.request({ type: "reset" });
   else timer.reset();
 }
+function skipBreak() {
+  announcement.value = "";
+  if (auth.user.value) void sync.request({ type: "skip-break" });
+  else timer.skipBreak();
+}
 function selectMode(index: number) {
   if (index < 0) return;
   announcement.value = "";
@@ -99,6 +106,10 @@ function selectMode(index: number) {
 }
 function openSettings() {
   settingsOpen.value = true;
+}
+async function testSound() {
+  await sound.unlock();
+  sound.play();
 }
 async function closeSettings() {
   settingsOpen.value = false;
@@ -127,7 +138,9 @@ watch(timer.completionCount, () => {
       ? "Rest"
       : "Focus";
   announcement.value = sessions.value.length
-    ? `${finished} complete. ${sessionLabel.value} is ready when you are.`
+    ? status.value === "finished"
+      ? "Session complete. Start your next session when you’re ready."
+      : `${finished} complete. ${sessionLabel.value} has started.`
     : "Focus complete. Nice work!";
   if (settings.value.soundEnabled) sound.play();
 });
@@ -248,6 +261,9 @@ onUnmounted(() => {
         :is-running="isRunning"
         :paused="status === 'paused'"
         :finished="status === 'finished'"
+        :next-session="status === 'finished' && sessions.length > 0"
+        :can-skip-break="isRest"
+        @skip-break="skipBreak"
         @start="start"
         @pause="pause"
         @reset="reset"
@@ -295,6 +311,7 @@ onUnmounted(() => {
       :settings="settings"
       @save="applySettings"
       @cancel="closeSettings"
+      @test-sound="testSound"
     />
   </div>
 </template>
