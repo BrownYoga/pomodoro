@@ -63,8 +63,12 @@ settings through Netlify Database.
 
 Use **Play Lo-fi** in the bottom-left corner to open Lofi Girl's official YouTube
 study radio. Nothing from YouTube loads until you choose music. Pause/resume and
-volume affect music only; stopping closes and destroys the player. Timer controls,
-settings, account changes and session completion do not control music.
+volume affect music only; stopping closes and destroys the player. When completion
+sound is enabled, music is silenced for the last two seconds of focus or rest and
+through the gong, then returns to your chosen volume. **Test gong** also silences
+music during its preview. Volume edits during this interval apply when music
+returns; manually pausing or stopping music stays respected. With completion
+sound disabled, timer transitions leave music volume alone.
 
 The feature uses the free YouTube IFrame API without keys or extra dependencies.
 The configured video ID is `rFZHOHl-L8A`: verified on 2026-10-21 against
@@ -151,7 +155,8 @@ Setup reference: [Netlify Identity](https://docs.netlify.com/manage/security/sec
 Enable completion sound in Settings for a louder gong after each focus or rest
 period. Use **Test gong** to preview it at your device's current volume without
 changing your saved preference. Sound is off by default. Audio is activated when
-you press Start and depends on the browser allowing audio playback. The app also
+you interact with the app (including starting lo-fi after restoring a running
+timer) and depends on the browser allowing audio playback. The app also
 shows a completion message. While the page is active, Space toggles start/pause
 and R resets; shortcuts do not intercept typing or button activation.
 

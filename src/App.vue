@@ -28,6 +28,20 @@ const {
   sessions,
 } = timer;
 const sound = useCompletionSound();
+const gongPlaying = ref(false);
+let gongTimeout: ReturnType<typeof setTimeout> | undefined;
+const quietMusic = computed(() => gongPlaying.value || (
+  settings.value.soundEnabled && isRunning.value && remainingSeconds.value <= 2
+));
+function unlockSound() {
+  if (settings.value.soundEnabled) void sound.unlock();
+}
+function playGong() {
+  gongPlaying.value = true;
+  clearTimeout(gongTimeout);
+  gongTimeout = setTimeout(() => { gongPlaying.value = false; }, 4600);
+  sound.play();
+}
 const settingsOpen = ref(false);
 const accountOpen = ref(false);
 const settingsButton = ref<HTMLButtonElement>();
@@ -109,7 +123,7 @@ function openSettings() {
 }
 async function testSound() {
   await sound.unlock();
-  sound.play();
+  playGong();
 }
 async function closeSettings() {
   settingsOpen.value = false;
@@ -142,7 +156,7 @@ watch(timer.completionCount, () => {
       ? "Session complete. Start your next session when you’re ready."
       : `${finished} complete. ${sessionLabel.value} has started.`
     : "Focus complete. Nice work!";
-  if (settings.value.soundEnabled) sound.play();
+  if (settings.value.soundEnabled) playGong();
 });
 const previousTitle = document.title;
 watch(
@@ -181,13 +195,14 @@ function onKeydown(event: KeyboardEvent) {
 }
 onMounted(() => window.addEventListener("keydown", onKeydown));
 onUnmounted(() => {
+  clearTimeout(gongTimeout);
   window.removeEventListener("keydown", onKeydown);
   document.title = previousTitle;
 });
 </script>
 
 <template>
-  <div class="app-shell">
+  <div class="app-shell" @pointerdown="unlockSound" @keydown="unlockSound">
     <header class="header">
       <a class="brand" href="#timer" aria-label="Pomodoro timer"
         ><span class="palette" aria-hidden="true"><i /><i /><i /><i /></span
@@ -305,7 +320,7 @@ onUnmounted(() => {
         ><kbd>Space</kbd> start / pause <span>·</span> <kbd>R</kbd> reset</span
       >
     </footer>
-    <LofiPlayer />
+    <LofiPlayer :quiet="quietMusic" />
     <TimerSettings
       v-if="settingsOpen"
       :settings="settings"

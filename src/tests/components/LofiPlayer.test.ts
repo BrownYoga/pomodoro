@@ -4,6 +4,7 @@ import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import LofiPlayer from '../../components/LofiPlayer.vue'
 import App from '../../App.vue'
 import type { YouTubePlayer, YouTubePlayerOptions } from '../../composables/useLofiPlayer'
+import { defaultSettings } from '../../domain/settings'
 
 enableAutoUnmount(afterEach)
 let events: YouTubePlayerOptions['events']
@@ -99,6 +100,49 @@ describe('optional lo-fi player', () => {
     await play(wrapper)
     wrapper.unmount()
     expect(player.destroy).toHaveBeenCalledOnce()
+  })
+
+  it('silences music temporarily, preserves volume edits, and never resumes a manually paused player', async () => {
+    const wrapper = mount(LofiPlayer)
+    await play(wrapper)
+    await wrapper.get('input[type="range"]').setValue('35')
+    await wrapper.setProps({ quiet: true })
+    expect(player.setVolume).toHaveBeenLastCalledWith(0)
+    await wrapper.get('input[type="range"]').setValue('65')
+    expect(player.setVolume).toHaveBeenLastCalledWith(0)
+    await wrapper.get('[data-testid="lofi-pause"]').trigger('click')
+    events.onStateChange({ data: 2 })
+    await wrapper.setProps({ quiet: false })
+    expect(player.setVolume).toHaveBeenLastCalledWith(65)
+    expect(player.playVideo).toHaveBeenCalledOnce()
+    expect(wrapper.get('[data-testid="lofi-play"]').text()).toContain('Resume')
+    await wrapper.get('[data-testid="lofi-stop"]').trigger('click')
+    await wrapper.setProps({ quiet: true })
+    await wrapper.setProps({ quiet: false })
+    expect(create).toHaveBeenCalledOnce()
+    expect(player.playVideo).toHaveBeenCalledOnce()
+  })
+
+  it('applies silence when a player becomes ready during the gong', async () => {
+    const wrapper = mount(LofiPlayer, { props: { quiet: true } })
+    await play(wrapper)
+    expect(player.setVolume).toHaveBeenLastCalledWith(0)
+    await wrapper.setProps({ quiet: false })
+    expect(player.setVolume).toHaveBeenLastCalledWith(50)
+  })
+
+  it('unlocks the gong on a music interaction without requiring the timer Start button', async () => {
+    localStorage.setItem('pomodoro-settings-v1', JSON.stringify({ ...defaultSettings, soundEnabled: true }))
+    const audio = { resume: vi.fn(async () => {}), close: vi.fn(async () => {}) }
+    vi.stubGlobal('AudioContext', vi.fn(function () { return audio }))
+    const wrapper = mount(App)
+    try {
+      await wrapper.get('[data-testid="lofi-play"]').trigger('pointerdown')
+      expect(audio.resume).toHaveBeenCalledOnce()
+    } finally {
+      wrapper.unmount()
+      vi.unstubAllGlobals()
+    }
   })
 
   it('keeps music independent of timer start, pause, resume, reset, completion and YouTube errors', async () => {

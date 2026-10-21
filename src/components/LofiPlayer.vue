@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { nextTick, ref } from 'vue'
+import { nextTick, ref, watch } from 'vue'
 import type { ComponentPublicInstance } from 'vue'
 import { useLofiPlayer } from '../composables/useLofiPlayer'
 import { LOFI_VIDEO_ID } from '../config/lofi'
 
-const { expanded, host, state, message, volume, play, pause, stop, setVolume } = useLofiPlayer()
+const props = defineProps<{ quiet?: boolean }>()
+const { expanded, host, state, message, volume, play, pause, stop, setVolume, setQuiet } = useLofiPlayer()
+watch(() => props.quiet, value => setQuiet(!!value), { immediate: true })
 const playButton = ref<HTMLButtonElement>()
 function setHost(element: Element | ComponentPublicInstance | null) {
   host.value = element instanceof HTMLElement ? element : undefined
@@ -29,6 +31,7 @@ async function close() {
           <label for="lofi-volume">Volume</label>
           <input id="lofi-volume" type="range" min="0" max="100" :value="volume" @input="setVolume(Number(($event.target as HTMLInputElement).value))" />
         </div>
+        <p v-if="quiet" class="lofi-message" role="status">Music quiet for the gong.</p>
         <p v-if="message" class="lofi-message" role="status">{{ message }}</p>
         <a :href="`https://www.youtube.com/watch?v=${LOFI_VIDEO_ID}`" target="_blank" rel="noopener noreferrer">Open on YouTube ↗</a>
       </section>

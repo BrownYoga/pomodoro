@@ -74,6 +74,7 @@ export function useLofiPlayer() {
   const state = ref<'inactive' | 'loading' | 'playing' | 'paused' | 'blocked' | 'error'>('inactive')
   const message = ref('')
   const volume = ref(50)
+  const quiet = ref(false)
   let player: YouTubePlayer | undefined
   let ready = false
   let generation = 0
@@ -139,7 +140,7 @@ export function useLofiPlayer() {
             clearTimeout(readyTimeout)
             player = event.target
             ready = true
-            try { player.setVolume(volume.value); playAtLiveEdge() }
+            try { player.setVolume(quiet.value ? 0 : volume.value); playAtLiveEdge() }
             catch { fail('YouTube playback failed. Please try again.') }
           },
           onStateChange: ({ data }) => {
@@ -167,8 +168,15 @@ export function useLofiPlayer() {
   }
   function setVolume(value: number) {
     volume.value = Math.max(0, Math.min(100, value))
-    try { if (ready) player?.setVolume(volume.value) }
+    applyVolume()
+  }
+  function applyVolume() {
+    try { if (ready) player?.setVolume(quiet.value ? 0 : volume.value) }
     catch { fail('YouTube playback failed. Please try again.') }
+  }
+  function setQuiet(value: boolean) {
+    quiet.value = value
+    applyVolume()
   }
   function stop() {
     ++generation
@@ -182,5 +190,5 @@ export function useLofiPlayer() {
     message.value = ''
   }
   onUnmounted(stop)
-  return { expanded, host, state, message, volume, play, pause, stop, setVolume }
+  return { expanded, host, state, message, volume, quiet, play, pause, stop, setVolume, setQuiet }
 }
