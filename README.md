@@ -51,6 +51,36 @@ unavailable, settings still apply for the current visit. The focus intention is
 not persisted. Signed-in accounts share timer state, completed focus count, and
 settings through Netlify Database.
 
+## Optional study music
+
+Use **Play Lo-fi** in the bottom-right corner to open Lofi Girl's official YouTube
+study radio. Nothing from YouTube loads until you choose music. Pause/resume and
+volume affect music only; stopping closes and destroys the player. Timer controls,
+settings, account changes and session completion do not control music.
+
+The feature uses the free YouTube IFrame API without keys or extra dependencies.
+The configured video ID is `rFZHOHl-L8A`: verified on 2026-10-21 against
+[the official channel](https://www.youtube.com/@LofiGirl/streams), its
+[watch page](https://www.youtube.com/watch?v=rFZHOHl-L8A) (live and embeddable),
+and YouTube's oEmbed response. Previous IDs `jfKfPfyJRdk` and `X4VbdwhkE10`
+were unavailable. If the broadcast moves, update `LOFI_VIDEO_ID` in
+`src/config/lofi.ts` after checking the official channel. Use only the video ID
+(the value after `v=` in the YouTube URL), then rebuild/redeploy the app.
+
+The visible player is at least 200 × 200 pixels. YouTube's own controls report
+live status; we don't infer LIVE from playback or archived live content. Explicit
+starts/resumes through our control seek to the API's reported duration as a
+best-effort attempt to reach the latest available position. YouTube controls the
+seek window and buffering; precise live synchronization is not guaranteed.
+See the [IFrame API reference](https://developers.google.com/youtube/iframe_api_reference).
+
+Unit and browser tests mock YouTube. Manually check real playback, pause/resume,
+volume and stopping on desktop and mobile (including Safari/iOS). Browser autoplay
+restrictions may require pressing play inside the visible YouTube player; some
+mobile browsers require hardware volume controls. Also check content blockers,
+network failure, regional restrictions and embedding errors on the deployed
+HTTPS site. A message and an Open on YouTube link provide a fallback.
+
 ## Accounts
 
 Sign in opens an email/password dialog. Guests can keep using every timer feature.

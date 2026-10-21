@@ -4,6 +4,7 @@ import TimerDisplay from "./components/TimerDisplay.vue";
 import TimerControls from "./components/TimerControls.vue";
 import TimerSettings from "./components/TimerSettings.vue";
 import AccountMenu from "./components/AccountMenu.vue";
+import LofiPlayer from "./components/LofiPlayer.vue";
 import { formatTime } from "./domain/timer";
 import { buildConfiguration } from "./domain/settings";
 import type { TimerSettings as Settings } from "./domain/settings";
@@ -283,6 +284,7 @@ onUnmounted(() => {
         ><kbd>Space</kbd> start / pause <span>·</span> <kbd>R</kbd> reset</span
       >
     </footer>
+    <LofiPlayer />
     <TimerSettings
       v-if="settingsOpen"
       :settings="settings"
