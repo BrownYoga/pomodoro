@@ -4,14 +4,27 @@ import type { ComponentPublicInstance } from 'vue'
 import { useLofiPlayer } from '../composables/useLofiPlayer'
 import { LOFI_VIDEO_ID } from '../config/lofi'
 
-const props = defineProps<{ quiet?: boolean; fadeQuiet?: boolean }>()
+const props = defineProps<{ quiet?: boolean; fadeQuiet?: boolean; isRest?: boolean; focusRunning?: boolean }>()
 const { expanded, host, state, message, volume, play, pause, stop, setVolume, setQuiet } = useLofiPlayer()
 watch(() => props.quiet, value => setQuiet(!!value, props.fadeQuiet ? 1000 : 0), { immediate: true })
+const resumeAfterBreak = ref(false)
+watch([() => props.isRest, () => props.focusRunning], ([isRest, focusRunning]) => {
+  if (isRest) {
+    if (expanded.value) {
+      resumeAfterBreak.value = ['playing', 'loading', 'blocked'].includes(state.value)
+      stop()
+    }
+  } else if (focusRunning && resumeAfterBreak.value) {
+    resumeAfterBreak.value = false
+    void play()
+  }
+}, { immediate: true })
 const playButton = ref<HTMLButtonElement>()
 function setHost(element: Element | ComponentPublicInstance | null) {
   host.value = element instanceof HTMLElement ? element : undefined
 }
 async function close() {
+  resumeAfterBreak.value = false
   stop()
   await nextTick()
   playButton.value?.focus()
@@ -39,8 +52,8 @@ async function close() {
     <button v-if="state === 'playing'" class="lofi-toggle" data-testid="lofi-pause" aria-controls="lofi-panel" aria-expanded="true" @click="pause">
       <span aria-hidden="true">Ⅱ</span> Pause lo-fi
     </button>
-    <button v-else ref="playButton" class="lofi-toggle" data-testid="lofi-play" :disabled="state === 'loading'" aria-controls="lofi-panel" :aria-expanded="expanded" @click="play">
-      <span aria-hidden="true">♫</span> {{ state === 'loading' ? 'Loading…' : state === 'paused' || state === 'blocked' ? 'Resume lo-fi' : 'Play Lo-fi' }}
+    <button v-else ref="playButton" class="lofi-toggle" data-testid="lofi-play" :disabled="isRest || state === 'loading'" aria-controls="lofi-panel" :aria-expanded="expanded" @click="play">
+      <span aria-hidden="true">♫</span> {{ isRest ? (resumeAfterBreak ? 'Lo-fi resumes with focus' : 'Lo-fi available during focus') : state === 'loading' ? 'Loading…' : state === 'paused' || state === 'blocked' ? 'Resume lo-fi' : 'Play Lo-fi' }}
     </button>
   </aside>
 </template>

@@ -55,7 +55,7 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/')
 })
 
-test('music remains optional and independent through a complete focus session', async ({ page }) => {
+test('music stays optional, closes for breaks and reopens for focus', async ({ page }) => {
   const frame = page.locator('iframe[title="Lofi Girl study radio"]')
   await expect(page.getByTestId('lofi-panel')).toHaveCount(0)
   await page.getByTestId('start-button').click()
@@ -72,6 +72,11 @@ test('music remains optional and independent through a complete focus session', 
   await page.getByTestId('start-button').click()
   await page.clock.fastForward(25 * 60 * 1000)
   await expect(page.getByTestId('completed-count')).toHaveText('1')
+  await expect(frame).toHaveCount(0)
+  await page.clock.runFor(250)
+  await expect(page.getByTestId('lofi-panel')).toHaveCount(0)
+  await expect(page.getByTestId('lofi-play')).toBeDisabled()
+  await page.clock.fastForward(5 * 60 * 1000)
   await expect(frame).toHaveAttribute('data-playing', 'true')
   await page.getByTestId('lofi-pause').click()
   await expect(frame).toHaveAttribute('data-playing', 'false')
@@ -106,7 +111,7 @@ test('all supplied MP3 recordings decode in the browser', async ({ page }) => {
   for (const duration of durations) expect(duration).toBeGreaterThan(0)
 })
 
-test('fades lo-fi from three seconds, plays one recording at two seconds, and restores music after playback', async ({ page }) => {
+test('fades music for the cue, closes during long rest and reopens with the next focus', async ({ page }) => {
   await page.getByTestId('open-settings').click()
   await page.getByTestId('focus-duration').fill('0.2')
   await page.getByTestId('long-rest-duration').fill('0.2')
@@ -132,25 +137,25 @@ test('fades lo-fi from three seconds, plays one recording at two seconds, and re
   await page.clock.runFor(2000)
   await expect(page.getByTestId('session-label')).toHaveText('Long rest session')
   await expect(root).toHaveAttribute('data-cue-count', '1')
-  await expect(frame).toHaveAttribute('data-volume', '0')
-  await page.locator('#lofi-volume').fill('35')
-  await expect(frame).toHaveAttribute('data-volume', '0')
+  await expect(frame).toHaveCount(0)
   await page.clock.runFor(1000)
-  await expect(frame).toHaveAttribute('data-volume', '35')
+  await expect(frame).toHaveCount(0)
   await page.clock.runFor(9000)
   await expect(root).toHaveAttribute('data-cue-count', '2')
-  await expect(frame).toHaveAttribute('data-volume', '0')
+  await expect(frame).toHaveCount(0)
   await page.clock.runFor(2000)
   await expect(page.getByTestId('timer-status')).toHaveText('Finished')
   await expect(root).toHaveAttribute('data-cue-count', '2')
   await page.clock.runFor(1000)
-  await expect(frame).toHaveAttribute('data-volume', '35')
+  await expect(frame).toHaveCount(0)
+  await page.getByTestId('start-button').click()
+  await expect(frame).toHaveAttribute('data-volume', '50')
   await expect(frame).toHaveAttribute('data-playing', 'true')
   await page.getByTestId('open-settings').click()
   await page.getByTestId('test-sound').click()
   await expect(frame).toHaveAttribute('data-volume', '0')
   await page.clock.runFor(3000)
-  await expect(frame).toHaveAttribute('data-volume', '35')
+  await expect(frame).toHaveAttribute('data-volume', '50')
 })
 
 test('keeps the mobile player visible at YouTube minimum dimensions', async ({ page }) => {

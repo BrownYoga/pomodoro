@@ -66,13 +66,15 @@ settings through Netlify Database.
 
 Use **Play Lo-fi** in the bottom-left corner to open Lofi Girl's official YouTube
 study radio. Nothing from YouTube loads until you choose music. Pause/resume and
-volume affect music only; stopping closes and destroys the player. When completion
-sound is enabled, music fades to silence from three seconds remaining. A voice
+volume affect music only; stopping closes and destroys the player. Breaks also close
+and destroy it; music that was playing restarts in a fresh player when focus
+starts again, preserving your volume. Manually paused or stopped music stays off.
+When completion sound is enabled, music fades to silence from three seconds remaining. A voice
 recording starts at two seconds remaining; music returns to your chosen volume
-after the recording and timer period end. **Test audio** also silences
+after the recording, if focus is active. **Test audio** also silences
 music during its preview. Volume edits during this interval apply when music
 returns; manually pausing or stopping music stays respected. With completion
-sound disabled, timer transitions leave music volume alone.
+sound disabled, music still closes for breaks and restarts with focus.
 
 The feature uses the free YouTube IFrame API without keys or extra dependencies.
 The configured video ID is `rFZHOHl-L8A`: verified on 2026-10-21 against

@@ -160,7 +160,7 @@ describe('optional lo-fi player', () => {
     }
   })
 
-  it('keeps music independent of timer start, pause, resume, reset, completion and YouTube errors', async () => {
+  it('closes music for a break and recreates it when focus automatically resumes', async () => {
     const wrapper = mount(App)
     await play(wrapper)
     await wrapper.get('[data-testid="start-button"]').trigger('click')
@@ -172,11 +172,50 @@ describe('optional lo-fi player', () => {
     expect(wrapper.get('[data-testid="completed-count"]').text()).toBe('1')
     expect(player.playVideo).toHaveBeenCalledOnce()
     expect(player.pauseVideo).not.toHaveBeenCalled()
-    expect(player.destroy).not.toHaveBeenCalled()
+    expect(player.destroy).toHaveBeenCalledOnce()
+    expect(wrapper.find('[data-testid="lofi-panel"]').exists()).toBe(false)
+    await vi.advanceTimersByTimeAsync(5 * 60 * 1000)
+    await flushPromises()
+    expect(create).toHaveBeenCalledTimes(2)
+    events.onReady({ target: player })
+    events.onStateChange({ data: 1 })
+    await flushPromises()
+    expect(player.playVideo).toHaveBeenCalledTimes(2)
+    expect(player.seekTo).toHaveBeenLastCalledWith(1000, true)
     events.onError({ data: 101 })
     await flushPromises()
     expect(wrapper.text()).toContain('cannot be played here')
     await vi.advanceTimersByTimeAsync(1000)
-    expect(wrapper.get('[data-testid="timer-display"]').text()).toBe('04:59')
+    expect(wrapper.get('[data-testid="timer-display"]').text()).toBe('24:59')
   })
+})
+
+
+it.each(['pause', 'stop'] as const)('does not restart manually %s music after a break', async action => {
+  const wrapper = mount(LofiPlayer)
+  await play(wrapper)
+  await wrapper.get('[data-testid="lofi-' + action + '"]').trigger('click')
+  await wrapper.setProps({ isRest: true, focusRunning: false })
+  await wrapper.setProps({ isRest: false, focusRunning: true })
+  expect(create).toHaveBeenCalledOnce()
+  expect(player.playVideo).toHaveBeenCalledOnce()
+})
+
+it('cancels loading on a break and waits for focus to run before creating a fresh player', async () => {
+  const wrapper = mount(LofiPlayer)
+  await wrapper.get('[data-testid="lofi-play"]').trigger('click')
+  await flushPromises()
+  const staleEvents = events
+  await wrapper.setProps({ isRest: true })
+  expect(player.destroy).toHaveBeenCalledOnce()
+  expect(wrapper.get('[data-testid="lofi-play"]').attributes('disabled')).toBeDefined()
+  staleEvents.onReady({ target: player })
+  expect(player.playVideo).not.toHaveBeenCalled()
+  await wrapper.setProps({ isRest: false, focusRunning: false })
+  expect(create).toHaveBeenCalledOnce()
+  await wrapper.setProps({ focusRunning: true })
+  await flushPromises()
+  expect(create).toHaveBeenCalledTimes(2)
+  events.onReady({ target: player })
+  expect(player.playVideo).toHaveBeenCalledOnce()
 })

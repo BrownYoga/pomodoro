@@ -341,7 +341,7 @@ onUnmounted(() => {
         ><kbd>Space</kbd> start / pause <span>·</span> <kbd>R</kbd> reset</span
       >
     </footer>
-    <LofiPlayer :quiet="quietMusic" :fade-quiet="!sound.playing.value" />
+    <LofiPlayer :quiet="quietMusic" :fade-quiet="!sound.playing.value" :is-rest="isRest" :focus-running="!isRest && isRunning" />
     <TimerSettings
       v-if="settingsOpen"
       :settings="settings"
