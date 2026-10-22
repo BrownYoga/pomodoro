@@ -10,7 +10,7 @@ export interface SharedTimerState {
   status: 'ready' | 'running' | 'paused' | 'finished'
   completedFocusSessions: number
 }
-export type TimerCommand = { type: 'start' | 'pause' | 'reset' | 'skip-break' } |
+export type TimerCommand = { type: 'start' | 'pause' | 'reset' | 'reset-session' | 'skip-break' } |
   { type: 'select'; index: number } | { type: 'configure'; settings: TimerSettings }
 export interface SharedTimerResponse { state: SharedTimerState; revision: number; serverNow: number }
 
@@ -50,6 +50,8 @@ export function applyTimerCommand(input: SharedTimerState, command: TimerCommand
         remainingMilliseconds: Math.max(0, state.endsAt! - now) } : state
     case 'reset':
       return { ...state, status: 'ready', endsAt: null, remainingMilliseconds: currentDuration(state) * 1000 }
+    case 'reset-session':
+      return freshTimer(state.settings)
     case 'skip-break': {
       const configuration = buildConfiguration(state.settings)
       if (typeof configuration === 'number' || configuration[state.sessionIndex]!.countsAsFocus) return state

@@ -178,6 +178,22 @@ describe('usePomodoro', () => {
     expect(timer.remainingSeconds.value).toBe(9)
   })
 
+  it('resets the entire sequence to its first focus and clears completions', async () => {
+    const timer = mountTimer(sessions)
+    timer.start()
+    await vi.advanceTimersByTimeAsync(10000)
+    expect(timer.completedFocusSessions.value).toBe(1)
+    timer.resetSession()
+    expect(timer.activeSessionId.value).toBe('work')
+    expect(timer.remainingSeconds.value).toBe(10)
+    expect(timer.completedFocusSessions.value).toBe(0)
+    expect(timer.status.value).toBe('ready')
+    expect(vi.getTimerCount()).toBe(0)
+    timer.start()
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(timer.remainingSeconds.value).toBe(9)
+  })
+
   it('catches up a delayed clock through long rest and waits for the next start', async () => {
     const timer = mountTimer([...sessions, { id: 'long-rest', durationSeconds: 2, countsAsFocus: false }])
     timer.start()

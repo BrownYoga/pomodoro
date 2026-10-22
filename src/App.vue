@@ -112,6 +112,12 @@ function skipBreak() {
   if (auth.user.value) void sync.request({ type: "skip-break" });
   else timer.skipBreak();
 }
+async function resetSession() {
+  if (auth.user.value) {
+    if (!await sync.request({ type: "reset-session" })) return;
+  } else timer.resetSession();
+  announcement.value = "Session reset. First focus period ready; completed count cleared.";
+}
 function selectMode(index: number) {
   if (index < 0) return;
   announcement.value = "";
@@ -282,6 +288,7 @@ onUnmounted(() => {
         @start="start"
         @pause="pause"
         @reset="reset"
+        @reset-session="resetSession"
       />
       </fieldset>
       <p v-if="sync.message.value" class="sync-message" data-testid="sync-status" role="status">{{ sync.message.value }}</p>

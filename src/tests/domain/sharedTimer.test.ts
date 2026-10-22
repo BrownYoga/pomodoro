@@ -3,6 +3,12 @@ import { applyTimerCommand, freshTimer, isSharedTimerState, reconcileTimer } fro
 import { defaultSettings } from '../../domain/settings'
 
 describe('shared timer rules', () => {
+  it.each(['running', 'paused', 'finished'] as const)('resets the whole %s session while preserving settings', status => {
+    const settings = { ...defaultSettings, focusSeconds: 42, soundEnabled: true }
+    const state = { ...freshTimer(settings), status, sessionIndex: 3,
+      completedFocusSessions: 2, remainingMilliseconds: 1000, endsAt: status === 'running' ? 5000 : null }
+    expect(applyTimerCommand(state, { type: 'reset-session' }, 1000)).toEqual(freshTimer(settings))
+  })
   const shortSettings = { ...defaultSettings, focusSeconds: 2, restSeconds: 1, longRestSeconds: 3, longRestEvery: 2 }
   it('runs a full cycle, stops after long rest, and starts the next cycle on request', () => {
     const running = applyTimerCommand(freshTimer(shortSettings), { type: 'start' }, 0)

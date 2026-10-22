@@ -227,6 +227,25 @@ test('runs through long rest, waits for the next cycle, and allows only breaks t
   await expect(page.getByTestId('completed-count')).toHaveText('4')
 })
 
+test('resets the whole session separately from the current timer', async ({ page }) => {
+  await page.getByTestId('open-settings').click()
+  await page.getByTestId('focus-duration').fill('0.1')
+  await page.getByTestId('save-settings').click()
+  await page.getByTestId('start-button').click()
+  await page.clock.runFor(6000)
+  await expect(page.getByTestId('session-label')).toHaveText('Rest session')
+  await page.getByTestId('reset-button').click()
+  await expect(page.getByTestId('completed-count')).toHaveText('1')
+  await expect(page.getByTestId('session-label')).toHaveText('Rest session')
+  await page.getByTestId('reset-session-button').click()
+  await expect(page.getByTestId('completed-count')).toHaveText('0')
+  await expect(page.getByTestId('session-label')).toHaveText('Focus session')
+  await expect(page.getByTestId('timer-display')).toHaveText('00:06')
+  await expect(page.getByTestId('timer-status')).toHaveText('Ready')
+  await page.clock.runFor(10000)
+  await expect(page.getByTestId('timer-display')).toHaveText('00:06')
+})
+
 test('supports keyboard shortcuts without intercepting typing', async ({ page }) => {
   await page.locator('body').click({ position: { x: 5, y: 5 } })
   await page.keyboard.press('Space')

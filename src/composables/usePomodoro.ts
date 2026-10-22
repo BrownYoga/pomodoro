@@ -113,6 +113,10 @@ export function usePomodoro(initialConfiguration: number | readonly SessionConfi
     status.value = 'ready'
   }
 
+  function resetSession() {
+    configure(sessions.value.length ? sessions.value : standaloneDuration.value)
+  }
+
   function selectSession(index: number) {
     if (!Number.isInteger(index) || !sessions.value[index]) return
     stopClock()
@@ -156,5 +160,5 @@ export function usePomodoro(initialConfiguration: number | readonly SessionConfi
   onUnmounted(stopClock)
   return { remainingSeconds, isRunning, status, activeSessionId, completedFocusSessions,
     start, pause, reset, configure, selectSession, sessionIndex, sessions,
-    durationSeconds, progress, completionCount, lastCompletedSession, restore, skipBreak }
+    durationSeconds, progress, completionCount, lastCompletedSession, restore, skipBreak, resetSession }
 }

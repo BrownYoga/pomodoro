@@ -46,7 +46,10 @@ Finishing the long rest stops the cycle and offers **Start next session**.
 state; skipping the long rest ends the cycle. Focus periods cannot be skipped
 with this control. With long rests disabled, focus and short rests keep alternating
 until paused or reset. Reset restores
-the current session and preserves the completed count. Changing timer durations
+the current period and preserves the completed count (**Reset timer**, or R).
+**Reset session** stops the timer, returns to the first focus period, and clears
+the completed count, keeping your durations and sound preference. This also
+resets your shared account timer when signed in. Changing timer durations
 or the session sequence starts a fresh sequence and clears the count. Changing
 only completion sound preserves the current session, countdown, and completed count.
 The sound preference is saved to your account when signed in, or in this browser

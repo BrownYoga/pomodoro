@@ -1,6 +1,6 @@
 ﻿<script setup lang="ts">
 defineProps<{ isRunning: boolean; finished?: boolean; paused?: boolean; nextSession?: boolean; canSkipBreak?: boolean }>()
-defineEmits<{ start: []; pause: []; reset: []; skipBreak: [] }>()
+defineEmits<{ start: []; pause: []; reset: []; resetSession: []; skipBreak: [] }>()
 </script>
 
 <template>
@@ -8,7 +8,8 @@ defineEmits<{ start: []; pause: []; reset: []; skipBreak: [] }>()
     <button v-if="!isRunning" class="primary" data-testid="start-button" :disabled="finished && !nextSession" @click="$emit('start')">{{ nextSession ? 'Start next session' : paused ? 'Resume' : 'Start' }} <span aria-hidden="true">▶</span></button>
     <button v-else class="primary running" data-testid="pause-button" @click="$emit('pause')">Pause <span aria-hidden="true">Ⅱ</span></button>
     <button v-if="canSkipBreak" class="reset" data-testid="skip-break-button" @click="$emit('skipBreak')">Skip break</button>
-    <button class="reset" data-testid="reset-button" @click="$emit('reset')">Reset <span aria-hidden="true">↺</span></button>
+    <button class="reset" data-testid="reset-button" @click="$emit('reset')">Reset timer <span aria-hidden="true">↺</span></button>
+    <button class="reset" data-testid="reset-session-button" title="Return to the first focus period and clear the completed count" @click="$emit('resetSession')">Reset session</button>
   </div>
 </template>
 
