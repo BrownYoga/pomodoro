@@ -4,9 +4,12 @@ import { defineComponent, ref } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
 import type { User } from '@netlify/identity'
+import { refreshSession } from '@netlify/identity'
 import { usePomodoro } from '../../composables/usePomodoro'
 import { useTimerSync } from '../../composables/useTimerSync'
 import { freshTimer } from '../../domain/sharedTimer'
+
+vi.mock('@netlify/identity', () => ({ refreshSession: vi.fn() }))
 
 describe('timer synchronization lifecycle', () => {
   let wrapper: VueWrapper | undefined
@@ -31,6 +34,7 @@ describe('timer synchronization lifecycle', () => {
     vi.stubGlobal('fetch', fetchMock)
     fetchMock.mockReset().mockImplementation(() => Promise.resolve(response()))
     save.mockReset()
+    vi.mocked(refreshSession).mockReset().mockResolvedValue('renewed-token')
     user.value = null
   })
   afterEach(() => {
@@ -122,6 +126,57 @@ describe('timer synchronization lifecycle', () => {
     await flushPromises()
     expect(timer.remainingSeconds.value).toBe(65)
     expect(save).not.toHaveBeenCalled()
+  })
+  it('silently refreshes and retries a rejected command exactly once', async () => {
+    user.value = { id: 'ash' }
+    await setup()
+    fetchMock.mockResolvedValueOnce(response(0, 401)).mockResolvedValueOnce(response(1))
+    expect(await sync.request({ type: 'start' })).toBe(true)
+    expect(refreshSession).toHaveBeenCalledOnce()
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(fetchMock.mock.calls[1]![1].body).toBe(fetchMock.mock.calls[2]![1].body)
+    expect(sync.sessionExpired.value).toBe(false)
+    expect(sync.disabled.value).toBe(false)
+  })
+  it('offers reauthentication after a second 401 and reloads the same account after login', async () => {
+    user.value = { id: 'ash' }
+    await setup()
+    timer.start()
+    fetchMock.mockResolvedValueOnce(response(0, 401)).mockResolvedValueOnce(response(0, 401))
+    expect(await sync.request({ type: 'pause' })).toBe(false)
+    expect(sync.sessionExpired.value).toBe(true)
+    expect(sync.disabled.value).toBe(true)
+    expect(timer.status.value).toBe('running')
+    expect(await sync.request({ type: 'reset' })).toBe(false)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    user.value = { id: 'ash' }
+    await flushPromises()
+    expect(fetchMock).toHaveBeenCalledTimes(4)
+    expect(sync.sessionExpired.value).toBe(false)
+    expect(sync.disabled.value).toBe(false)
+  })
+  it('recovers an initial 401 even when refresh reports no new token', async () => {
+    vi.mocked(refreshSession).mockResolvedValue(null)
+    user.value = { id: 'ash' }
+    fetchMock.mockResolvedValueOnce(response(0, 401)).mockResolvedValueOnce(response())
+    await setup()
+    expect(refreshSession).toHaveBeenCalledOnce()
+    expect(sync.message.value).toBe('Account timer loaded')
+  })
+  it('does not retry a rejected command after the account changes during refresh', async () => {
+    user.value = { id: 'ash' }
+    await setup()
+    let finishRefresh!: (token: string) => void
+    vi.mocked(refreshSession).mockImplementationOnce(() => new Promise(resolve => { finishRefresh = resolve }))
+    fetchMock.mockResolvedValueOnce(response(0, 401))
+    const saving = sync.request({ type: 'start' })
+    await flushPromises()
+    user.value = null
+    await flushPromises()
+    finishRefresh('new-token')
+    expect(await saving).toBe(false)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(sync.message.value).toBe('')
   })
   it('rejects malformed responses and cleans up pending requests on unmount', async () => {
     user.value = { id: 'ash' }

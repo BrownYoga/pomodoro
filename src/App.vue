@@ -285,6 +285,7 @@ onUnmounted(() => {
       />
       </fieldset>
       <p v-if="sync.message.value" class="sync-message" data-testid="sync-status" role="status">{{ sync.message.value }}</p>
+      <button v-if="sync.sessionExpired.value" class="reconnect-button" data-testid="reconnect-account" @click="auth.requestSignIn">Sign in again</button>
       <p class="announcement" role="status" data-testid="completion-message">
         {{ announcement || "\u00a0" }}
       </p>
@@ -352,6 +353,7 @@ onUnmounted(() => {
 .controls-fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 .controls-fieldset:disabled { opacity: .6; }
 .sync-message { color: var(--color-muted); text-align: center; font-size: .75rem; max-width: 30rem; line-height: 1.5; }
+.reconnect-button { background: var(--color-surface); color: var(--color-mint); border: 1px solid var(--color-border); border-radius: .7rem; padding: .65rem 1rem; }
 .brand {
   color: var(--color-lime);
   text-decoration: none;

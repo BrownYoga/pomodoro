@@ -96,6 +96,40 @@ test('shows a sign-in error and allows another attempt', async ({ page }) => {
   await expect(page.getByTestId('open-account')).toBeFocused()
 })
 
+test('reconnects an expired account directly without signing out', async ({ page }) => {
+  await mockIdentity(page)
+  await page.getByTestId('open-account').click()
+  await page.getByTestId('auth-email').fill(account.email)
+  await page.getByTestId('auth-password').fill('test-password')
+  await page.getByTestId('auth-submit').click()
+  await expect(page.getByTestId('sync-status')).toHaveText('Account timer loaded')
+  let rejected = 0
+  const timerEndpoint = '**/.netlify/functions/timer'
+  await page.route(timerEndpoint, route => {
+    rejected++
+    return route.fulfill({ status: 401, json: { error: 'Sign in required' } })
+  })
+  await page.getByTestId('start-button').click()
+  await expect(page.getByTestId('reconnect-account')).toBeVisible()
+  expect(rejected).toBe(2)
+  await expect(page.getByTestId('start-button')).toBeDisabled()
+  await expect(page.getByTestId('timer-display')).toHaveText('25:00')
+  await page.getByTestId('reconnect-account').click()
+  await expect(page.getByTestId('auth-email')).toHaveValue(account.email)
+  await expect(page.getByTestId('auth-password')).toHaveValue('')
+  await page.getByTestId('close-account').click()
+  await expect(page.getByTestId('reconnect-account')).toBeVisible()
+  await page.getByTestId('reconnect-account').click()
+  await page.unroute(timerEndpoint)
+  await page.route(timerEndpoint, route => route.fulfill({ json: { state: freshTimer(), revision: 0, serverNow: Date.now() } }))
+  await page.getByTestId('auth-password').fill('test-password')
+  await page.getByTestId('auth-submit').click()
+  await expect(page.getByTestId('account-dialog')).not.toBeVisible()
+  await expect(page.getByTestId('sync-status')).toHaveText('Account timer loaded')
+  await expect(page.getByTestId('reconnect-account')).not.toBeVisible()
+  await expect(page.getByTestId('start-button')).toBeEnabled()
+})
+
 test('shows email confirmation instructions and supports requesting a recovery link', async ({ page }) => {
   await mockIdentity(page)
   await page.getByTestId('open-account').click()

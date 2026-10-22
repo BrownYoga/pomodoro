@@ -1,6 +1,7 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import type { Ref } from 'vue'
 import type { User } from '@netlify/identity'
+import { refreshSession } from '@netlify/identity'
 import type { usePomodoro } from './usePomodoro'
 import { isSharedTimerState } from '../domain/sharedTimer'
 import type { SharedTimerResponse, TimerCommand } from '../domain/sharedTimer'
@@ -10,28 +11,38 @@ export function useTimerSync(user: Ref<User | null>, timer: ReturnType<typeof us
   const message = ref('')
   const busy = ref(false)
   const ready = ref(false)
-  const disabled = computed(() => !!user.value && (!ready.value || busy.value))
+  const sessionExpired = ref(false)
+  const disabled = computed(() => !!user.value && (!ready.value || busy.value || sessionExpired.value))
   let revision = -1
   let generation = 0
   let inFlight = false
   let controller: AbortController | undefined
 
   async function request(command?: TimerCommand) {
-    if (!user.value || inFlight || (command && !ready.value)) return false
+    if (!user.value || inFlight || (command && (!ready.value || sessionExpired.value))) return false
     const accountGeneration = generation
     const isCurrent = () => accountGeneration === generation
-    const startedAt = Date.now()
+    let startedAt = Date.now()
     const activeController = new AbortController()
     controller = activeController
     inFlight = true
     busy.value = !!command
     const timeout = setTimeout(() => activeController.abort(), 10000)
     try {
-      const response = await fetch('/.netlify/functions/timer', {
+      const send = () => fetch('/.netlify/functions/timer', {
         method: command ? 'POST' : 'GET', credentials: 'same-origin', cache: 'no-store',
         signal: activeController.signal,
         ...(command ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ command, revision }) } : {}),
       })
+      let response = await send()
+      if (!isCurrent()) return false
+      if (response.status === 401) {
+        // A rejected request has not changed the timer, so it is safe to retry once.
+        await refreshSession()
+        if (!isCurrent() || activeController.signal.aborted) return false
+        startedAt = Date.now()
+        response = await send()
+      }
       if (!isCurrent()) return false
       if (!response.ok && response.status !== 409) throw new Error(response.status === 401 ? 'session' : 'network')
       const data: SharedTimerResponse = await response.json()
@@ -44,14 +55,16 @@ export function useTimerSync(user: Ref<User | null>, timer: ReturnType<typeof us
         revision = data.revision
       }
       ready.value = true
+      sessionExpired.value = false
       message.value = response.status === 409
         ? 'The timer changed on another device. Updated here; try your action again.'
         : command ? 'Timer saved to your account' : 'Account timer loaded'
       return response.ok
     } catch (error) {
       if (isCurrent()) {
-        message.value = error instanceof Error && error.message === 'session'
-          ? 'Your session expired. Sign out and sign in again to sync.'
+        sessionExpired.value = error instanceof Error && error.message === 'session'
+        message.value = sessionExpired.value
+          ? 'Sync is paused. Sign in again to reconnect your account timer.'
           : command ? 'Could not save your timer. Check your connection and try your action again.'
             : 'Could not load your timer. Check your connection and reload to try again.'
       }
@@ -62,12 +75,15 @@ export function useTimerSync(user: Ref<User | null>, timer: ReturnType<typeof us
     }
   }
 
-  watch(() => user.value?.id, () => {
+  watch(user, (nextUser, previousUser) => {
+    // A fresh login can reconnect the same account; routine token updates need no reload.
+    if (nextUser?.id === previousUser?.id && !sessionExpired.value) return
     generation++
     controller?.abort()
     inFlight = false
     busy.value = false
     ready.value = false
+    sessionExpired.value = false
     revision = -1
     message.value = user.value ? 'Connecting your timer…' : ''
     if (user.value) void request()
@@ -76,5 +92,5 @@ export function useTimerSync(user: Ref<User | null>, timer: ReturnType<typeof us
     generation++
     controller?.abort()
   })
-  return { message, busy, disabled, request }
+  return { message, busy, disabled, sessionExpired, request }
 }

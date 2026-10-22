@@ -102,6 +102,10 @@ Signing in loads your account's shared timer (a new account starts with defaults
 Signing out keeps the displayed timer available as a guest; guest changes do not
 update the saved account timer. The Identity SDK manages the saved
 authentication session; the app does not save passwords.
+If a timer request is rejected as unauthenticated, the app asks Identity to refresh
+the session and retries once. If it is still rejected, **Sign in again** opens the
+login dialog with the account email filled in. The displayed timer stays in place
+while reconnecting; signing in reloads the saved account timer.
 Signup asks for your name; existing accounts can click **Add your name** (or their
 current name) in the header to edit it. Every password form has a Show / Hide button.
 

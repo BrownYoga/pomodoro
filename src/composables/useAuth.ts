@@ -48,6 +48,12 @@ export function useAuth() {
     notice.value = ''
   }
 
+  function requestSignIn() {
+    changeMode('login')
+    notice.value = 'Sign in again to reconnect your account timer.'
+    openRequested.value = true
+  }
+
   async function submit(email: string, password: string, name = ''): Promise<boolean> {
     if (busy.value || !settings.value) return false
     busy.value = true
@@ -121,5 +127,5 @@ export function useAuth() {
   onUnmounted(() => unsubscribe())
 
   return { user, settings, loading, busy, error, notice, mode, openRequested,
-    initialize, changeMode, submit, signOut }
+    initialize, changeMode, requestSignIn, submit, signOut }
 }

@@ -55,6 +55,16 @@ describe('useAuth', () => {
     expect(unsubscribe).toHaveBeenCalledOnce()
     wrapper = undefined
   })
+  it('opens login for reauthentication without signing out the current account', async () => {
+    vi.mocked(identity.getUser).mockResolvedValue(account)
+    const auth = await setup()
+    auth.changeMode('profile')
+    auth.requestSignIn()
+    expect(auth.mode.value).toBe('login')
+    expect(auth.openRequested.value).toBe(true)
+    expect(auth.user.value).toEqual(account)
+    expect(identity.logout).not.toHaveBeenCalled()
+  })
   it('leaves guests usable when Identity is unavailable', async () => {
     vi.mocked(identity.getSettings).mockRejectedValue(new Error('offline'))
     const auth = await setup()

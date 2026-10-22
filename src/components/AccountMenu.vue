@@ -47,7 +47,13 @@ async function onSubmit() {
   if (success) close()
 }
 watch(openRequested, (requested) => {
-  if (requested) { void open(); openRequested.value = false }
+  if (requested) {
+    email.value = user.value?.email ?? email.value
+    password.value = ''
+    showPassword.value = false
+    void open()
+    openRequested.value = false
+  }
 })
 </script>
 
