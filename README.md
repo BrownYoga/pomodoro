@@ -67,8 +67,9 @@ settings through Netlify Database.
 Use **Play Lo-fi** in the bottom-left corner to open Lofi Girl's official YouTube
 study radio. Nothing from YouTube loads until you choose music. Pause/resume and
 volume affect music only; stopping closes and destroys the player. When completion
-sound is enabled, music is silenced for the last two seconds of focus or rest and
-through the gong, then returns to your chosen volume. **Test gong** also silences
+sound is enabled, music fades to silence from three seconds remaining. A voice
+recording starts at two seconds remaining; music returns to your chosen volume
+after the recording and timer period end. **Test audio** also silences
 music during its preview. Volume edits during this interval apply when music
 returns; manually pausing or stopping music stays respected. With completion
 sound disabled, timer transitions leave music volume alone.
@@ -159,8 +160,13 @@ Database setup: [Netlify Database getting started](https://docs.netlify.com/buil
 
 Setup reference: [Netlify Identity](https://docs.netlify.com/manage/security/secure-access-to-sites/identity/get-started/).
 
-Enable completion sound in Settings for a louder gong after each focus or rest
-period. Use **Test gong** to preview it at your device's current volume without
+Enable **Voice cues for focus and rest** in Settings to use the MP3 recordings
+in `src/assets/Sounds`: “It's time to take a break” before a short rest,
+“Your session has been completed” before the long rest, and “It's time to start
+studying again” when a rest ends. These replace the synthesized gong and begin
+with two seconds remaining. If a delayed browser callback misses this window,
+the latest transition is announced when the timer catches up, without repeating
+a cue already played. Use **Test audio** to preview the current period's cue at your device's volume without
 changing your saved preference. Sound is off by default. Audio is activated when
 you interact with the app (including starting lo-fi after restoring a running
 timer) and depends on the browser allowing audio playback. The app also

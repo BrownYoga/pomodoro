@@ -1,43 +1,77 @@
-import { onUnmounted } from 'vue'
+import { onUnmounted, ref } from 'vue'
+import breakAudio from "../assets/Sounds/It's time to take a break.mp3"
+import studyAudio from "../assets/Sounds/It's time to start studying again.mp3"
+import completedAudio from '../assets/Sounds/Your session has been completed.mp3'
+import type { SessionConfig } from '../domain/pomodoro'
+
+export type CompletionCue = 'break' | 'study' | 'completed'
+const recordings = { break: breakAudio, study: studyAudio, completed: completedAudio }
+
+export function completionCue(sessions: readonly SessionConfig[], index: number): CompletionCue {
+  if (!sessions.length) return 'completed'
+  if (!sessions[index]?.countsAsFocus) return 'study'
+  return sessions[(index + 1) % sessions.length]?.id === 'long-rest' ? 'completed' : 'break'
+}
 
 export function useCompletionSound() {
+  const playing = ref(false)
   let context: AudioContext | undefined
-  const active = new Set<OscillatorNode>()
-  function stop() {
-    for (const oscillator of active) oscillator.stop()
-    active.clear()
+  let source: AudioBufferSourceNode | undefined
+  let generation = 0
+  const buffers = new Map<CompletionCue, Promise<AudioBuffer>>()
+  function load(cue: CompletionCue) {
+    if (!buffers.has(cue)) {
+      const audioContext = context!
+      const buffer = fetch(recordings[cue], { signal: AbortSignal.timeout(10000) }).then(response => {
+        if (!response.ok) throw new Error('Could not load audio')
+        return response.arrayBuffer()
+      }).then(data => audioContext.decodeAudioData(data)).catch(error => {
+        buffers.delete(cue)
+        throw error
+      })
+      buffers.set(cue, buffer)
+    }
+    return buffers.get(cue)!
   }
   async function unlock() {
     try {
       context ??= new AudioContext()
       await context.resume()
+      await Promise.allSettled((Object.keys(recordings) as CompletionCue[]).map(load))
     } catch { /* Audio is optional. */ }
   }
-  function play() {
-    if (!context || context.state !== 'running') return
+  function stop() {
+    generation++
+    if (source) {
+      source.onended = null
+      source.stop()
+      source.disconnect()
+      source = undefined
+    }
+    playing.value = false
+  }
+  async function play(cue: CompletionCue = 'break') {
     stop()
-    // Inharmonic partials give the strike a metallic gong timbre. Their combined
-    // peak stays below 1, with a longer decay than the previous quiet chime.
-    const partials = [
-      [180, 0.3, 4.5], [286, 0.2, 3.8], [416, 0.14, 3.2],
-      [574, 0.09, 2.6], [812, 0.06, 1.8], [1040, 0.04, 1.2],
-    ] as const
-    for (const [frequency, amplitude, decay] of partials) {
-      const oscillator = context.createOscillator()
-      const gain = context.createGain()
-      const time = context.currentTime
-      oscillator.frequency.value = frequency
-      gain.gain.setValueAtTime(0, time)
-      gain.gain.linearRampToValueAtTime(amplitude, time + 0.008)
-      gain.gain.exponentialRampToValueAtTime(0.0001, time + decay)
-      oscillator.connect(gain)
-      gain.connect(context.destination)
-      oscillator.start(time)
-      oscillator.stop(time + decay + 0.05)
-      active.add(oscillator)
-      oscillator.onended = () => { active.delete(oscillator); oscillator.disconnect(); gain.disconnect() }
+    if (!context || context.state !== 'running') return
+    const token = generation
+    playing.value = true
+    try {
+      const buffer = await load(cue)
+      if (token !== generation) return
+      source = context.createBufferSource()
+      source.buffer = buffer
+      source.connect(context.destination)
+      source.onended = () => {
+        if (token !== generation) return
+        source?.disconnect()
+        source = undefined
+        playing.value = false
+      }
+      source.start()
+    } catch {
+      if (token === generation) playing.value = false
     }
   }
   onUnmounted(() => { stop(); void context?.close().catch(() => {}) })
-  return { unlock, play }
+  return { unlock, play, stop, playing }
 }

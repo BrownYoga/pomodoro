@@ -46,8 +46,8 @@ function submit() {
         <label>Long rest after <span>focus sessions · 0 disables</span><input v-model.number="draft.longRestEvery" data-testid="long-rest-frequency" type="number" min="0" max="12" step="1" /></label>
       </fieldset>
       <div class="sound-controls">
-        <label class="toggle"><input v-model="draft.soundEnabled" data-testid="enable-sound" type="checkbox" /> Gong after focus and rest</label>
-        <button type="button" data-testid="test-sound" @click="emit('testSound')">Test gong</button>
+        <label class="toggle"><input v-model="draft.soundEnabled" data-testid="enable-sound" type="checkbox" /> Voice cues for focus and rest</label>
+        <button type="button" data-testid="test-sound" @click="emit('testSound')">Test audio</button>
       </div>
       <p class="hint">Runs automatically through long rest, then waits for Start next session.</p>
       <p class="hint">Decimals work too: 0.5 minutes is 30 seconds.</p>

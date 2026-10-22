@@ -2,50 +2,74 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 import { mount } from '@vue/test-utils'
-import { useCompletionSound } from '../../composables/useCompletionSound'
+import { completionCue, useCompletionSound } from '../../composables/useCompletionSound'
+import { buildConfiguration, defaultSettings } from '../../domain/settings'
 
 afterEach(() => vi.unstubAllGlobals())
 
-describe('completion gong', () => {
-  it('unlocks on demand, plays a sustained metallic strike, and cleans up overlapping strikes', async () => {
-    const oscillators: any[] = []
-    const gains: any[] = []
+describe('recorded completion cues', () => {
+  it('chooses short-break, long-break and study recordings from the sequence', () => {
+    const sessions = buildConfiguration(defaultSettings)
+    if (typeof sessions === 'number') throw new Error('Expected sequence')
+    expect(completionCue(sessions, 0)).toBe('break')
+    expect(completionCue(sessions, 6)).toBe('completed')
+    expect(completionCue(sessions, 1)).toBe('study')
+    expect(completionCue(sessions, 7)).toBe('study')
+    expect(completionCue([], 0)).toBe('completed')
+  })
+
+  it('preloads once, tracks actual playback ending, and cancels overlapping cues', async () => {
+    const makeSource = () => ({ buffer: null, connect: vi.fn(), disconnect: vi.fn(), start: vi.fn(), stop: vi.fn(), onended: null as (() => void) | null })
+    const sources: ReturnType<typeof makeSource>[] = []
     const context = {
-      state: 'suspended', currentTime: 10, destination: {},
-      resume: vi.fn(async () => { context.state = 'running' }), close: vi.fn(async () => {}),
-      createOscillator: () => {
-        const oscillator = { frequency: { value: 0 }, connect: vi.fn(), disconnect: vi.fn(), start: vi.fn(), stop: vi.fn(), onended: () => {} }
-        oscillators.push(oscillator)
-        return oscillator
-      },
-      createGain: () => {
-        const gain = { gain: { setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() }, connect: vi.fn(), disconnect: vi.fn() }
-        gains.push(gain)
-        return gain
-      },
+      state: 'running', destination: {}, resume: vi.fn(async () => {}), close: vi.fn(async () => {}),
+      decodeAudioData: vi.fn(async () => ({ duration: 3 })),
+      createBufferSource: () => { const source = makeSource(); sources.push(source); return source },
     }
-    const Audio = vi.fn(function () { return context })
-    vi.stubGlobal('AudioContext', Audio)
+    const fetchAudio = vi.fn(async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(4) }))
+    vi.stubGlobal('fetch', fetchAudio)
+    vi.stubGlobal('AudioContext', vi.fn(function () { return context }))
     let sound!: ReturnType<typeof useCompletionSound>
     const wrapper = mount(defineComponent({ setup() { sound = useCompletionSound(); return () => null } }))
-    sound.play()
-    expect(Audio).not.toHaveBeenCalled()
     await sound.unlock()
-    sound.play()
-    expect(oscillators).toHaveLength(6)
-    const peak = gains.reduce((sum, gain) => sum + gain.gain.linearRampToValueAtTime.mock.calls[0][0], 0)
-    expect(peak).toBeGreaterThan(0.7)
-    expect(peak).toBeLessThan(1)
-    expect(oscillators[0].stop).toHaveBeenCalledWith(14.55)
-    sound.play()
-    for (const oscillator of oscillators.slice(0, 6)) {
-      expect(oscillator.stop).toHaveBeenLastCalledWith()
-      oscillator.onended()
-      expect(oscillator.disconnect).toHaveBeenCalledOnce()
-    }
+    await sound.unlock()
+    expect(fetchAudio).toHaveBeenCalledTimes(3)
+    await sound.play('break')
+    expect(sound.playing.value).toBe(true)
+    expect(sources[0]!.start).toHaveBeenCalledOnce()
+    await sound.play('study')
+    expect(sources[0]!.stop).toHaveBeenCalledOnce()
+    expect(sources[0]!.disconnect).toHaveBeenCalledOnce()
+    sources[1]!.onended?.()
+    expect(sound.playing.value).toBe(false)
+    await sound.play('completed')
     wrapper.unmount()
+    expect(sources[2]!.stop).toHaveBeenCalledOnce()
     expect(context.close).toHaveBeenCalledOnce()
-    for (const oscillator of oscillators.slice(6)) expect(oscillator.stop).toHaveBeenLastCalledWith()
+  })
+
+  it('does not start a cue canceled during loading and recovers from unavailable audio', async () => {
+    let resolveAudio!: (data: ArrayBuffer) => void
+    const downloaded = new Promise<ArrayBuffer>(resolve => { resolveAudio = resolve })
+    const context = {
+      state: 'running', resume: vi.fn(async () => {}), close: vi.fn(async () => {}),
+      decodeAudioData: vi.fn(async () => ({})), createBufferSource: vi.fn(),
+    }
+    vi.stubGlobal('AudioContext', vi.fn(function () { return context }))
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, arrayBuffer: () => downloaded })))
+    let sound!: ReturnType<typeof useCompletionSound>
+    const wrapper = mount(defineComponent({ setup() { sound = useCompletionSound(); return () => null } }))
+    // Start unlocking without waiting for downloads; cancel a pending cue.
+    void sound.unlock()
+    await Promise.resolve()
+    const pending = sound.play('break')
+    await Promise.resolve()
+    sound.stop()
+    resolveAudio(new ArrayBuffer(4))
+    await pending
+    expect(context.createBufferSource).not.toHaveBeenCalled()
+    expect(sound.playing.value).toBe(false)
+    wrapper.unmount()
   })
 
   it('keeps the timer usable when browser audio is unavailable', async () => {
@@ -53,7 +77,8 @@ describe('completion gong', () => {
     let sound!: ReturnType<typeof useCompletionSound>
     const wrapper = mount(defineComponent({ setup() { sound = useCompletionSound(); return () => null } }))
     await expect(sound.unlock()).resolves.toBeUndefined()
-    expect(() => sound.play()).not.toThrow()
+    await expect(sound.play()).resolves.toBeUndefined()
+    expect(sound.playing.value).toBe(false)
     wrapper.unmount()
   })
 })

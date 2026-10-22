@@ -75,6 +75,8 @@ export function useLofiPlayer() {
   const message = ref('')
   const volume = ref(50)
   const quiet = ref(false)
+  let musicLevel = 1
+  let fadeInterval: ReturnType<typeof setInterval> | undefined
   let player: YouTubePlayer | undefined
   let ready = false
   let generation = 0
@@ -140,7 +142,7 @@ export function useLofiPlayer() {
             clearTimeout(readyTimeout)
             player = event.target
             ready = true
-            try { player.setVolume(quiet.value ? 0 : volume.value); playAtLiveEdge() }
+            try { player.setVolume(volume.value * musicLevel); playAtLiveEdge() }
             catch { fail('YouTube playback failed. Please try again.') }
           },
           onStateChange: ({ data }) => {
@@ -171,14 +173,28 @@ export function useLofiPlayer() {
     applyVolume()
   }
   function applyVolume() {
-    try { if (ready) player?.setVolume(quiet.value ? 0 : volume.value) }
+    try { if (ready) player?.setVolume(volume.value * musicLevel) }
     catch { fail('YouTube playback failed. Please try again.') }
   }
-  function setQuiet(value: boolean) {
+  function setQuiet(value: boolean, fadeMilliseconds = 0) {
+    clearInterval(fadeInterval)
     quiet.value = value
+    if (value && fadeMilliseconds > 0 && ready) {
+      const startedAt = Date.now()
+      const initialLevel = musicLevel
+      fadeInterval = setInterval(() => {
+        musicLevel = initialLevel * Math.max(0, 1 - (Date.now() - startedAt) / fadeMilliseconds)
+        applyVolume()
+        if (musicLevel === 0) clearInterval(fadeInterval)
+      }, 50)
+      return
+    }
+    musicLevel = value ? 0 : 1
     applyVolume()
   }
   function stop() {
+    clearInterval(fadeInterval)
+    musicLevel = quiet.value ? 0 : 1
     ++generation
     clearTimeouts()
     try { player?.destroy() } catch { /* Removing the iframe below stops playback. */ }

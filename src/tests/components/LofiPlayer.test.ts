@@ -123,7 +123,22 @@ describe('optional lo-fi player', () => {
     expect(player.playVideo).toHaveBeenCalledOnce()
   })
 
-  it('applies silence when a player becomes ready during the gong', async () => {
+  it('fades down over a second and cancels the fade when quiet mode ends', async () => {
+    const wrapper = mount(LofiPlayer, { props: { fadeQuiet: true } })
+    await play(wrapper)
+    await wrapper.setProps({ quiet: true })
+    await vi.advanceTimersByTimeAsync(500)
+    expect(player.setVolume).toHaveBeenLastCalledWith(25)
+    await wrapper.setProps({ quiet: false })
+    expect(player.setVolume).toHaveBeenLastCalledWith(50)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(player.setVolume).toHaveBeenLastCalledWith(50)
+    await wrapper.setProps({ quiet: true })
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(player.setVolume).toHaveBeenLastCalledWith(0)
+  })
+
+  it('applies silence when a player becomes ready during a voice cue', async () => {
     const wrapper = mount(LofiPlayer, { props: { quiet: true } })
     await play(wrapper)
     expect(player.setVolume).toHaveBeenLastCalledWith(0)
@@ -131,7 +146,7 @@ describe('optional lo-fi player', () => {
     expect(player.setVolume).toHaveBeenLastCalledWith(50)
   })
 
-  it('unlocks the gong on a music interaction without requiring the timer Start button', async () => {
+  it('unlocks voice audio on a music interaction without requiring the timer Start button', async () => {
     localStorage.setItem('pomodoro-settings-v1', JSON.stringify({ ...defaultSettings, soundEnabled: true }))
     const audio = { resume: vi.fn(async () => {}), close: vi.fn(async () => {}) }
     vi.stubGlobal('AudioContext', vi.fn(function () { return audio }))

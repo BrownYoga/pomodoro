@@ -6,6 +6,34 @@ test.beforeEach(async ({ page }) => {
   await page.clock.install({ time: new Date('2026-10-21T12:00:00Z') })
   await page.clock.pauseAt(new Date('2026-10-21T12:01:00Z'))
   await page.addInitScript(() => {
+    Object.defineProperty(window, 'NativeAudioContext', { value: window.AudioContext })
+    // Keep recording playback deterministic under Playwright's simulated clock.
+    class TestAudioContext {
+      state = 'running'
+      destination = {}
+      async resume() {}
+      async close() {}
+      async decodeAudioData() {
+        const root = document.documentElement
+        root.dataset.decodedAudio = String(Number(root.dataset.decodedAudio ?? 0) + 1)
+        return { duration: 3 }
+      }
+      createBufferSource() {
+        let timeout: ReturnType<typeof setTimeout>
+        const source = {
+          buffer: null, onended: null as (() => void) | null,
+          connect() {}, disconnect() {},
+          start() {
+            const root = document.documentElement
+            root.dataset.cueCount = String(Number(root.dataset.cueCount ?? 0) + 1)
+            timeout = setTimeout(() => source.onended?.(), 3000)
+          },
+          stop() { clearTimeout(timeout) },
+        }
+        return source
+      }
+    }
+    Object.defineProperty(window, 'AudioContext', { value: TestAudioContext })
     window.YT = { Player: class {
       frame: HTMLIFrameElement
       options: YouTubePlayerOptions
@@ -57,7 +85,28 @@ test('music remains optional and independent through a complete focus session', 
   await expect(page.getByTestId('lofi-play')).toBeFocused()
 })
 
-test('silences lo-fi before focus and rest endings and restores the chosen volume after the gong', async ({ page }) => {
+test('all supplied MP3 recordings decode in the browser', async ({ page }) => {
+  const durations = await page.evaluate(async () => {
+    const NativeAudio = (window as unknown as { NativeAudioContext: typeof AudioContext }).NativeAudioContext
+    const context = new NativeAudio()
+    try {
+      return await Promise.all([
+        "It's time to take a break.mp3",
+        "It's time to start studying again.mp3",
+        'Your session has been completed.mp3',
+      ].map(async name => {
+        const response = await fetch(`/src/assets/Sounds/${encodeURIComponent(name)}`)
+        if (!response.ok) throw new Error(`Could not load ${name}`)
+        const buffer = await context.decodeAudioData(await response.arrayBuffer())
+        return buffer.duration
+      }))
+    } finally { await context.close() }
+  })
+  expect(durations).toHaveLength(3)
+  for (const duration of durations) expect(duration).toBeGreaterThan(0)
+})
+
+test('fades lo-fi from three seconds, plays one recording at two seconds, and restores music after playback', async ({ page }) => {
   await page.getByTestId('open-settings').click()
   await page.getByTestId('focus-duration').fill('0.2')
   await page.getByTestId('long-rest-duration').fill('0.2')
@@ -66,35 +115,41 @@ test('silences lo-fi before focus and rest endings and restores the chosen volum
   await page.getByTestId('save-settings').click()
   await page.getByTestId('lofi-play').click()
   const frame = page.locator('iframe[title="Lofi Girl study radio"]')
+  const root = page.locator('html')
+  // Wait for the three real assets to download into the mocked audio decoder.
+  await expect(root).toHaveAttribute('data-decoded-audio', '3')
   await expect(frame).toHaveAttribute('data-volume', '50')
   await page.getByTestId('start-button').click()
-  await page.clock.runFor(9750)
+  await page.clock.runFor(9000)
   await expect(frame).toHaveAttribute('data-volume', '50')
-  await page.clock.runFor(250)
+  await page.clock.runFor(500)
+  expect(Number(await frame.getAttribute('data-volume'))).toBeGreaterThan(0)
+  expect(Number(await frame.getAttribute('data-volume'))).toBeLessThan(50)
+  await expect(root).not.toHaveAttribute('data-cue-count')
+  await page.clock.runFor(500)
   await expect(frame).toHaveAttribute('data-volume', '0')
-  await page.getByTestId('pause-button').click()
-  await expect(frame).toHaveAttribute('data-volume', '50')
-  await page.getByTestId('start-button').click()
-  await expect(frame).toHaveAttribute('data-volume', '0')
+  await expect(root).toHaveAttribute('data-cue-count', '1')
   await page.clock.runFor(2000)
   await expect(page.getByTestId('session-label')).toHaveText('Long rest session')
+  await expect(root).toHaveAttribute('data-cue-count', '1')
   await expect(frame).toHaveAttribute('data-volume', '0')
   await page.locator('#lofi-volume').fill('35')
   await expect(frame).toHaveAttribute('data-volume', '0')
-  await page.clock.runFor(4600)
+  await page.clock.runFor(1000)
   await expect(frame).toHaveAttribute('data-volume', '35')
-  await page.clock.runFor(5400)
+  await page.clock.runFor(9000)
+  await expect(root).toHaveAttribute('data-cue-count', '2')
   await expect(frame).toHaveAttribute('data-volume', '0')
   await page.clock.runFor(2000)
   await expect(page.getByTestId('timer-status')).toHaveText('Finished')
-  await expect(frame).toHaveAttribute('data-volume', '0')
-  await page.clock.runFor(4600)
+  await expect(root).toHaveAttribute('data-cue-count', '2')
+  await page.clock.runFor(1000)
   await expect(frame).toHaveAttribute('data-volume', '35')
   await expect(frame).toHaveAttribute('data-playing', 'true')
   await page.getByTestId('open-settings').click()
   await page.getByTestId('test-sound').click()
   await expect(frame).toHaveAttribute('data-volume', '0')
-  await page.clock.runFor(4600)
+  await page.clock.runFor(3000)
   await expect(frame).toHaveAttribute('data-volume', '35')
 })
 

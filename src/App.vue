@@ -10,7 +10,7 @@ import { buildConfiguration, timerConfigurationChanged } from "./domain/settings
 import type { TimerSettings as Settings } from "./domain/settings";
 import { usePomodoro } from "./composables/usePomodoro";
 import { useSettings } from "./composables/useSettings";
-import { useCompletionSound } from "./composables/useCompletionSound";
+import { completionCue, useCompletionSound } from "./composables/useCompletionSound";
 import { useAuth } from "./composables/useAuth";
 import { useTimerSync } from "./composables/useTimerSync";
 
@@ -28,20 +28,24 @@ const {
   sessions,
 } = timer;
 const sound = useCompletionSound();
-const gongPlaying = ref(false);
-let gongTimeout: ReturnType<typeof setTimeout> | undefined;
-const quietMusic = computed(() => gongPlaying.value || (
-  settings.value.soundEnabled && isRunning.value && remainingSeconds.value <= 2
+let announcedCompletion = -1;
+const quietMusic = computed(() => sound.playing.value || (
+  settings.value.soundEnabled && isRunning.value && remainingSeconds.value <= 3
 ));
 function unlockSound() {
   if (settings.value.soundEnabled) void sound.unlock();
 }
-function playGong() {
-  gongPlaying.value = true;
-  clearTimeout(gongTimeout);
-  gongTimeout = setTimeout(() => { gongPlaying.value = false; }, 4600);
-  sound.play();
+function cancelCue() {
+  announcedCompletion = -1;
+  sound.stop();
 }
+watch([remainingSeconds, isRunning, () => settings.value.soundEnabled], () => {
+  if (!settings.value.soundEnabled) { cancelCue(); return; }
+  if (!isRunning.value || remainingSeconds.value > 2) return;
+  if (announcedCompletion === timer.completionCount.value + 1) return;
+  announcedCompletion = timer.completionCount.value + 1;
+  void sound.play(completionCue(sessions.value, timer.sessionIndex.value));
+});
 const settingsOpen = ref(false);
 const accountOpen = ref(false);
 const settingsButton = ref<HTMLButtonElement>();
@@ -99,20 +103,24 @@ function start() {
   else timer.start();
 }
 function pause() {
+  cancelCue();
   if (auth.user.value) void sync.request({ type: "pause" });
   else timer.pause();
 }
 function reset() {
+  cancelCue();
   announcement.value = "";
   if (auth.user.value) void sync.request({ type: "reset" });
   else timer.reset();
 }
 function skipBreak() {
+  cancelCue();
   announcement.value = "";
   if (auth.user.value) void sync.request({ type: "skip-break" });
   else timer.skipBreak();
 }
 async function resetSession() {
+  cancelCue();
   if (auth.user.value) {
     if (!await sync.request({ type: "reset-session" })) return;
   } else timer.resetSession();
@@ -120,6 +128,7 @@ async function resetSession() {
 }
 function selectMode(index: number) {
   if (index < 0) return;
+  cancelCue();
   announcement.value = "";
   if (auth.user.value) void sync.request({ type: "select", index });
   else timer.selectSession(index);
@@ -129,7 +138,7 @@ function openSettings() {
 }
 async function testSound() {
   await sound.unlock();
-  playGong();
+  void sound.play(completionCue(sessions.value, timer.sessionIndex.value));
 }
 async function closeSettings() {
   settingsOpen.value = false;
@@ -138,6 +147,7 @@ async function closeSettings() {
 }
 async function applySettings(next: Settings) {
   const configurationChanged = timerConfigurationChanged(settings.value, next);
+  if (configurationChanged) cancelCue();
   // Unlock during the Save gesture, including when enabling sound mid-session.
   if (next.soundEnabled) void sound.unlock();
   if (auth.user.value) {
@@ -162,7 +172,11 @@ watch(timer.completionCount, () => {
       ? "Session complete. Start your next session when you’re ready."
       : `${finished} complete. ${sessionLabel.value} has started.`
     : "Focus complete. Nice work!";
-  if (settings.value.soundEnabled) playGong();
+  // A delayed/background callback may miss the two-second cue window.
+  if (settings.value.soundEnabled && announcedCompletion < timer.completionCount.value) {
+    const index = sessions.value.findIndex(session => session.id === timer.lastCompletedSession.value);
+    void sound.play(completionCue(sessions.value, index));
+  }
 });
 const previousTitle = document.title;
 watch(
@@ -201,7 +215,6 @@ function onKeydown(event: KeyboardEvent) {
 }
 onMounted(() => window.addEventListener("keydown", onKeydown));
 onUnmounted(() => {
-  clearTimeout(gongTimeout);
   window.removeEventListener("keydown", onKeydown);
   document.title = previousTitle;
 });
@@ -328,7 +341,7 @@ onUnmounted(() => {
         ><kbd>Space</kbd> start / pause <span>·</span> <kbd>R</kbd> reset</span
       >
     </footer>
-    <LofiPlayer :quiet="quietMusic" />
+    <LofiPlayer :quiet="quietMusic" :fade-quiet="!sound.playing.value" />
     <TimerSettings
       v-if="settingsOpen"
       :settings="settings"
