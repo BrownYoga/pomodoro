@@ -31,6 +31,8 @@ describe('timer synchronization lifecycle', () => {
   }
   beforeEach(() => {
     vi.useFakeTimers()
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true)
     vi.stubGlobal('fetch', fetchMock)
     fetchMock.mockReset().mockImplementation(() => Promise.resolve(response()))
     save.mockReset()
@@ -51,21 +53,25 @@ describe('timer synchronization lifecycle', () => {
     expect(timer.remainingSeconds.value).toBe(62)
     expect(sync.disabled.value).toBe(false)
   })
-  it('loads account state once without timer, focus, visibility, or online polling', async () => {
+  it('refreshes visible signed-in devices every five seconds and on returning to the app', async () => {
     user.value = { id: 'ash' }
     await setup()
     expect(timer.remainingSeconds.value).toBe(1500)
     expect(sync.message.value).toBe('Account timer loaded')
-    await vi.advanceTimersByTimeAsync(3600000)
+    timer.start()
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(timer.remainingSeconds.value).toBe(1495)
+    expect(timer.status.value).toBe('running')
     window.dispatchEvent(new Event('focus'))
     window.dispatchEvent(new Event('online'))
     document.dispatchEvent(new Event('visibilitychange'))
     await flushPromises()
-    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(fetchMock).toHaveBeenCalledTimes(3)
     user.value = null
     await flushPromises()
     await vi.advanceTimersByTimeAsync(6000)
-    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(fetchMock).toHaveBeenCalledTimes(3)
     expect(sync.message.value).toBe('')
   })
   it('submits commands with the last server revision and reconciles conflicts', async () => {
@@ -103,15 +109,18 @@ describe('timer synchronization lifecycle', () => {
     expect(sync.busy.value).toBe(false)
     expect(sync.disabled.value).toBe(false)
   })
-  it('reports offline failures without automatic retries and allows a manual retry', async () => {
+  it('never replays failed commands and reconnects with reads when online', async () => {
     user.value = { id: 'ash' }
     await setup()
     fetchMock.mockRejectedValueOnce(new Error('offline'))
     expect(await sync.request({ type: 'start' })).toBe(false)
     expect(sync.message.value).toContain('Could not save')
     expect(timer.status.value).toBe('ready')
-    await vi.advanceTimersByTimeAsync(60000)
+    await vi.advanceTimersByTimeAsync(9999)
     expect(fetchMock).toHaveBeenCalledTimes(2)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(fetchMock.mock.calls[2]![1].method).toBe('GET')
     expect(await sync.request({ type: 'start' })).toBe(true)
     expect(sync.message.value).toBe('Timer saved to your account')
   })
@@ -182,11 +191,48 @@ describe('timer synchronization lifecycle', () => {
     user.value = { id: 'ash' }
     fetchMock.mockResolvedValueOnce(new Response('{"state":{}}'))
     await setup()
-    expect(sync.message.value).toContain('Could not load')
+    expect(sync.message.value).toContain('Could not refresh')
     expect(timer.remainingSeconds.value).toBe(65)
     wrapper!.unmount()
     wrapper = undefined
     await vi.advanceTimersByTimeAsync(6000)
     expect(fetchMock).toHaveBeenCalledOnce()
+  })
+
+  it('pauses background refreshes while hidden or offline and catches up on return', async () => {
+    user.value = { id: 'ash' }
+    await setup()
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
+    await vi.advanceTimersByTimeAsync(15000)
+    expect(fetchMock).toHaveBeenCalledOnce()
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
+    document.dispatchEvent(new Event('visibilitychange'))
+    await flushPromises()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+    await vi.advanceTimersByTimeAsync(15000)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true)
+    window.dispatchEvent(new Event('online'))
+    await flushPromises()
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+
+  it('lets a user command supersede a pending background read and ignores the stale response', async () => {
+    user.value = { id: 'ash' }
+    await setup()
+    let finishRead!: (value: Response) => void
+    fetchMock.mockImplementationOnce(() => new Promise<Response>(resolve => { finishRead = resolve }))
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(sync.disabled.value).toBe(false)
+    const readSignal = fetchMock.mock.calls[1]![1].signal as AbortSignal
+    fetchMock.mockResolvedValueOnce(response(2))
+    expect(await sync.request({ type: 'reset' })).toBe(true)
+    expect(readSignal.aborted).toBe(true)
+    finishRead(response(1))
+    await flushPromises()
+    fetchMock.mockResolvedValueOnce(response(3))
+    await sync.request({ type: 'start' })
+    expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body).revision).toBe(2)
   })
 })

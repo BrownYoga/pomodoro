@@ -1,14 +1,13 @@
 import { expect, test } from '@playwright/test'
-import type { Browser, BrowserContext, Page } from '@playwright/test'
+import type { BrowserContext, Page } from '@playwright/test'
 import { applyTimerCommand, freshTimer, reconcileTimer } from '../src/domain/sharedTimer'
 import type { SharedTimerState } from '../src/domain/sharedTimer'
 
-test('loads shared account timers on sign-in and reload, with no background polling', async ({ browser, baseURL }) => {
+test('automatically syncs pause, resume, reset and settings across devices without reloading', async ({ browser, baseURL }) => {
   let serverNow = Date.parse('2026-01-01T00:01:00Z')
   const saved = new Map<string, { state: SharedTimerState; revision: number }>()
   const contexts: BrowserContext[] = []
-  let requestCount = 0
-  async function device(browser: Browser, id: string, clockSkew = 0) {
+  async function device(id: string, clockSkew = 0) {
     const context = await browser.newContext({ baseURL })
     contexts.push(context)
     const page = await context.newPage()
@@ -16,11 +15,11 @@ test('loads shared account timers on sign-in and reload, with no background poll
     const token = `${Buffer.from('{"alg":"HS256"}').toString('base64url')}.${Buffer.from(JSON.stringify({ sub: id, exp: 4_000_000_000 })).toString('base64url')}.test`
     await page.route('**/.netlify/identity/**', route => {
       const path = new URL(route.request().url()).pathname.split('/').at(-1)
-      return route.fulfill({ json: path === 'settings' ? { autoconfirm: false, disable_signup: false, external: { email: true } }
+      return route.fulfill({ json: path === 'settings' ? { autoconfirm: false, external: { email: true } }
         : path === 'token' ? { access_token: token, refresh_token: 'test', expires_in: 3600, token_type: 'bearer' } : user })
     })
+    await page.route('**/.netlify/functions/music-library', route => route.fulfill({ json: { entries: [] } }))
     await page.route('**/.netlify/functions/timer', async route => {
-      requestCount++
       const row = saved.get(id) ?? { state: freshTimer(), revision: 0 }
       const body = route.request().method() === 'POST' ? route.request().postDataJSON() : null
       if (body && body.revision !== row.revision) {
@@ -33,8 +32,7 @@ test('loads shared account timers on sign-in and reload, with no background poll
       saved.set(id, row)
       await route.fulfill({ json: { ...row, serverNow } })
     })
-    const now = new Date(serverNow - 60000 + clockSkew)
-    await page.clock.install({ time: now })
+    await page.clock.install({ time: new Date(serverNow - 60000 + clockSkew) })
     await page.clock.pauseAt(new Date(serverNow + clockSkew))
     await page.goto('/')
     await page.getByTestId('open-account').click()
@@ -44,82 +42,56 @@ test('loads shared account timers on sign-in and reload, with no background poll
     await expect(page.getByTestId('sync-status')).toHaveText('Account timer loaded')
     return page
   }
-  async function advance(pages: Page[], milliseconds: number) {
+  async function advance(pages: Page[], milliseconds = 5000) {
     serverNow += milliseconds
     await Promise.all(pages.map(page => page.clock.runFor(milliseconds)))
   }
   try {
-    const pc = await device(browser, 'ash')
+    const pc = await device('ash')
+    const phone = await device('ash', 600000)
+    const other = await device('someone-else')
     await pc.getByTestId('start-button').click()
     await expect(pc.getByTestId('timer-status')).toHaveText('Running')
-    await advance([pc], 3000)
-    expect(requestCount).toBe(2)
-    // A clock ten minutes fast must not change the shared remaining time.
-    const phone = await device(browser, 'ash', 600000)
-    const otherUser = await device(browser, 'someone-else')
-    expect(requestCount).toBe(4)
+    await advance([pc, phone, other])
     await expect(phone.getByTestId('timer-status')).toHaveText('Running')
-    await expect(phone.getByTestId('timer-display')).toHaveText('24:57')
-    await expect(pc.getByTestId('timer-display')).toHaveText('24:57')
-    await expect(otherUser.getByTestId('timer-status')).toHaveText('Ready')
+    await expect(phone.getByTestId('timer-display')).toHaveText('24:55')
+    await expect(other.getByTestId('timer-status')).toHaveText('Ready')
     await phone.getByTestId('pause-button').click()
     await expect(phone.getByTestId('timer-status')).toHaveText('Paused')
-    await advance([pc, phone], 3000)
-    // An already-open device learns remote actions only when explicitly reloaded.
-    await expect(pc.getByTestId('timer-status')).toHaveText('Running')
-    await expect(pc.getByTestId('timer-display')).toHaveText('24:54')
-    expect(requestCount).toBe(5)
-    await pc.reload()
+    await advance([pc, phone])
     await expect(pc.getByTestId('timer-status')).toHaveText('Paused')
-    await expect(pc.getByTestId('timer-display')).toHaveText('24:57')
+    await expect(pc.getByTestId('timer-display')).toHaveText('24:55')
     await pc.getByTestId('start-button').click()
     await expect(pc.getByTestId('timer-status')).toHaveText('Running')
-    await phone.reload()
+    await advance([pc, phone])
     await expect(phone.getByTestId('timer-status')).toHaveText('Running')
-    await advance([pc, phone], 3000)
-    await expect(phone.getByTestId('timer-display')).toHaveText('24:54')
+    await expect(phone.getByTestId('timer-display')).toHaveText('24:50')
     await phone.getByTestId('reset-button').click()
     await expect(phone.getByTestId('timer-status')).toHaveText('Ready')
-    await advance([pc, phone], 3000)
-    await pc.reload()
-    await expect(pc.getByTestId('timer-display')).toHaveText('25:00')
+    await advance([pc, phone])
     await expect(pc.getByTestId('timer-status')).toHaveText('Ready')
+    await expect(pc.getByTestId('timer-display')).toHaveText('25:00')
     await pc.getByTestId('open-settings').click()
     await pc.getByTestId('focus-duration').fill('0.1')
     await pc.getByTestId('save-settings').click()
     await expect(pc.getByTestId('settings-dialog')).not.toBeVisible()
-    await phone.reload()
+    await advance([pc, phone])
     await expect(phone.getByTestId('timer-display')).toHaveText('00:06')
     await phone.getByTestId('start-button').click()
     await expect(phone.getByTestId('timer-status')).toHaveText('Running')
-    const beforeCompletion = requestCount
-    await advance([pc, phone], 6000)
-    expect(requestCount).toBe(beforeCompletion)
-    await expect(pc.getByTestId('completed-count')).toHaveText('0')
-    await expect(phone.getByTestId('completed-count')).toHaveText('1')
-    await pc.reload()
+    await advance([pc, phone])
+    await expect(pc.getByTestId('timer-status')).toHaveText('Running')
+    await advance([pc, phone])
     await expect(pc.getByTestId('completed-count')).toHaveText('1')
-    await expect(pc.getByTestId('session-label')).toHaveText('Rest session')
-    await phone.reload()
-    await expect(phone.getByTestId('session-label')).toHaveText('Rest session')
     await expect(phone.getByTestId('completed-count')).toHaveText('1')
-    // Sound is an account preference, not a timer configuration change.
-    await expect(phone.getByTestId('timer-status')).toHaveText('Running')
-    await advance([phone], 3000)
+    await expect(pc.getByTestId('session-label')).toHaveText('Rest session')
+    await expect(phone.getByTestId('session-label')).toHaveText('Rest session')
     await phone.getByTestId('open-settings').click()
     await phone.getByTestId('enable-sound').check()
     await phone.getByTestId('save-settings').click()
     await expect(phone.getByTestId('settings-dialog')).not.toBeVisible()
-    await expect(phone.getByTestId('timer-status')).toHaveText('Running')
-    await expect(phone.getByTestId('timer-display')).toHaveText('04:57')
-    await expect(phone.getByTestId('completed-count')).toHaveText('1')
-    // A fresh signed-in device loads the preference from the account.
-    const nextLogin = await device(browser, 'ash')
-    await expect(nextLogin.getByTestId('session-label')).toHaveText('Rest session')
-    await expect(nextLogin.getByTestId('timer-display')).toHaveText('04:57')
-    await nextLogin.getByTestId('open-settings').click()
-    await expect(nextLogin.getByTestId('enable-sound')).toBeChecked()
-  } finally {
-    await Promise.all(contexts.map(context => context.close()))
-  }
+    await advance([pc, phone])
+    await pc.getByTestId('open-settings').click()
+    await expect(pc.getByTestId('enable-sound')).toBeChecked()
+  } finally { await Promise.all(contexts.map(context => context.close())) }
 })

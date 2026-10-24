@@ -203,9 +203,13 @@ create live accounts or send real emails.
 
 Use the same account on your PC and phone. Start, pause, resume, reset, session
 selection, settings, and completed focus counts are saved to your account. Signing
-in or reloading fetches the saved timer; control actions send updates. There is
-no automatic polling, focus-triggered fetching, or realtime subscription. A device
-already open keeps its local countdown until it reloads or sends an action. If
+in or reloading fetches the saved timer; control actions send updates. While the
+app is visible and online, it checks for account changes every five seconds
+after the previous request completes. Returning to the app or reconnecting to
+the internet also requests the latest state. Pause, resume, reset, session
+selection, and settings therefore reach other open devices without a reload.
+Hidden/offline pages suspend these checks and catch up on return. This is polling,
+not an instant push connection; browser throttling and network latency can delay it. If
 another device changed the timer, a stale action loads the latest state and asks
 you to try the action again. A saved finish
 timestamp keeps the countdown correct after reloads or closing the app, even if
@@ -218,9 +222,14 @@ server and chooses the database row from the verified user ID. POST requests
 require a matching Origin and JSON content type. SQL queries use parameters;
 revision checks reject stale writes rather than overwriting another device.
 An offline device keeps displaying the countdown but cannot save control actions.
-There is no offline action queue or automatic retry; retry a failed action yourself,
-or reload if the initial account load failed. Timer completion makes no API call;
-the server resolves the saved deadline on the next load or action.
+There is no offline action queue or automatic replay of failed commands; retry
+a failed action yourself. Reads retry automatically with a delay increasing from
+10 seconds to a maximum of 30 seconds after failures. Successful refreshes return
+to five-second checks. Initial load failures also recover automatically. A user
+action takes priority over a pending refresh, and unchanged server revisions do
+not reset the local countdown. Sign-out and unmount cancel requests and checks;
+an expired session stops checks until sign-in. Timer completion makes no dedicated
+API call; the server resolves saved deadlines on the next refresh or action.
 
 `@netlify/database` and the SQL migration under `netlify/database/migrations`
 allow Netlify to provision the database and apply the schema during deployment.
