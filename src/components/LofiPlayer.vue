@@ -7,9 +7,16 @@ import { musicSourceUrl, parseMusicLink, shuffleSongs } from '../domain/music'
 import type { MusicSource } from '../domain/music'
 import { useMusicLibrary } from '../composables/useMusicLibrary'
 import type { SavedMusicLink } from '../composables/useMusicLibrary'
+import BrownNoisePlayer from './BrownNoisePlayer.vue'
 
 const props = defineProps<{ quiet?: boolean; fadeQuiet?: boolean; isRest?: boolean; focusRunning?: boolean; user?: { id: string } | null }>()
 const emit = defineEmits<{ signIn: [] }>()
+const brownNoise = ref<InstanceType<typeof BrownNoisePlayer>>()
+function activateBrownNoise() {
+  resumeAfterBreak.value = false
+  libraryOpen.value = false
+  stop()
+}
 const provider = ref<'lofi' | 'youtube'>('lofi')
 const selected = ref<MusicSource>({ videoId: LOFI_VIDEO_ID })
 const musicLink = ref('')
@@ -119,6 +126,7 @@ watch(() => props.user?.id, () => {
   selected.value = { videoId: LOFI_VIDEO_ID }
 }, { flush: 'sync' })
 async function openYouTube() {
+  brownNoise.value?.stop()
   resumeAfterBreak.value = false
   stop()
   shuffleActive.value = false
@@ -144,6 +152,7 @@ async function playLink() {
   await play()
 }
 function playLofi() {
+  brownNoise.value?.stop()
   if (isYouTube.value) {
     resumeAfterBreak.value = false
     stop()
@@ -247,17 +256,18 @@ async function close() {
       <span aria-hidden="true">♫</span> {{ isRest ? (!isYouTube && resumeAfterBreak ? 'Lo-fi resumes with focus' : 'Lo-fi available during focus') : !isYouTube && state === 'loading' ? 'Loading…' : !isYouTube && (state === 'paused' || state === 'blocked') ? 'Resume lo-fi' : 'Play Lo-fi' }}
     </button>
     <button ref="youtubeButton" class="lofi-toggle youtube-toggle" data-testid="youtube-music" aria-controls="lofi-panel" :aria-expanded="expanded && isYouTube" @click="expanded && isYouTube ? close() : openYouTube()"><span class="youtube-icon" aria-hidden="true">▶</span> YouTube Music</button>
+    <BrownNoisePlayer ref="brownNoise" :quiet="quiet" :fade-quiet="fadeQuiet" :is-rest="isRest" :focus-running="focusRunning" @activate="activateBrownNoise" />
     </div>
   </aside>
 </template>
 
 <style scoped>
-.lofi { position: fixed; left: max(1rem, env(safe-area-inset-left)); bottom: max(1rem, env(safe-area-inset-bottom)); z-index: 10; display: flex; flex-direction: column; align-items: flex-start; gap: .65rem; }
+.lofi { position: fixed; left: max(1rem, env(safe-area-inset-left)); bottom: max(1rem, env(safe-area-inset-bottom)); z-index: 10; display: flex; flex-direction: column; align-items: flex-start; gap: .65rem; max-width: calc(100vw - 2rem); max-height: calc(100dvh - 9rem); }
 .lofi-toggle, .lofi-panel { background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-muted); border-radius: .9rem; }
 .lofi-toggle { padding: .75rem 1rem; font-size: .8rem; display: flex; gap: .6rem; align-items: center; }
 .lofi-toggle:hover, .lofi-heading button:hover { color: var(--color-lime); }
 .lofi-toggle:disabled { opacity: .6; cursor: wait; }
-.music-providers { display: flex; flex-wrap: wrap; gap: .5rem; }
+.music-providers { display: flex; flex-wrap: wrap; gap: .5rem; flex-shrink: 0; }
 .youtube-icon { color: var(--color-red); }
 .youtube-toggle[aria-expanded="true"] { border-color: var(--color-teal); color: var(--color-mint); }
 .music-form { display: grid; gap: .6rem; margin: 1rem 0; font-size: .75rem; }
@@ -287,7 +297,7 @@ async function close() {
 .music-library .music-delete { color: var(--color-red); }
 .music-playback { margin: .75rem 0; display: flex; flex-wrap: wrap; gap: .5rem; }
 .music-error { color: var(--color-red); }
-.lofi-panel { width: min(22rem, calc(100vw - 2rem)); min-width: 202px; padding: .75rem; box-shadow: 0 12px 40px #0005; max-height: calc(100dvh - 6rem); overflow-y: auto; }
+.lofi-panel { width: min(22rem, calc(100vw - 2rem)); min-width: 202px; min-height: 0; padding: .75rem; box-shadow: 0 12px 40px #0005; max-height: calc(100dvh - 6rem); overflow-y: auto; }
 .lofi-heading { display: flex; justify-content: space-between; align-items: center; gap: .5rem; margin-bottom: .6rem; font-size: .8rem; color: var(--color-mint); }
 .lofi-caption { color: var(--color-muted); }
 .lofi-heading button { color: var(--color-muted); background: transparent; font-size: 1.3rem; padding: .2rem .5rem; }

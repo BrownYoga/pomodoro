@@ -64,6 +64,15 @@ settings through Netlify Database.
 
 ## Optional study music
 
+**Brown noise** plays a low rumble generated locally with Web Audio. No account,
+audio download, or external service is required. Use its button to play, pause,
+or resume; the small panel offers volume and a stop/close control. Selecting
+brown noise stops YouTube music, and selecting either music option stops noise.
+It quiets for voice cues and closes for breaks, restarting with focus only if it
+was previously playing. Pausing or closing manually cancels automatic restart.
+The noise uses a looping buffer with an overlap to smooth the boundary. Browser
+audio restrictions may require another click; failures show a retry message.
+
 **YouTube Music** opens a song/playlist panel next to **Play Lo-fi**. Copy a
 YouTube Music or YouTube share link and select **Play music**. Public or unlisted
 embeddable content plays in the visible YouTube player, with volume, pause/resume,
