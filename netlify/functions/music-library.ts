@@ -1,6 +1,6 @@
 import { getUser, verifyRequestOrigin } from '@netlify/identity'
 import { getDatabase } from '@netlify/database'
-import { musicSourceUrl, parseMusicLink } from '../../src/domain/music.ts'
+import { musicLibraryUrl, parseMusicLink } from '../../src/domain/music.ts'
 
 const reply = (body: unknown, status = 200) => Response.json(body, {
   status, headers: { 'Cache-Control': 'private, no-store' },
@@ -26,7 +26,7 @@ export default async (request: Request) => {
       if (!source || (body.name !== undefined && typeof body.name !== 'string')) throw new Error()
       const name = (body.name ?? '').trim()
       if (name.length > 80) throw new Error()
-      command = { type: body.type, url: musicSourceUrl(source), name,
+      command = { type: body.type, url: musicLibraryUrl(source), name,
         fallback: `${source.videoId ? 'Song' : 'Playlist'} · ${source.videoId ?? source.playlistId}` }
     } catch { return reply({ error: 'Invalid music link' }, 400) }
   }

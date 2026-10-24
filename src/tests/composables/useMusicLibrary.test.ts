@@ -100,6 +100,7 @@ it('supports a persistent guest development library without any API or authentic
   expect(library.disabled.value).toBe(false)
   await library.save(song, 'Dev focus')
   await library.save('https://youtu.be/abcdefghijk', 'Renamed')
+  await library.save(`${song}&list=PLabcdefghijk`, '')
   expect(library.entries.value).toEqual([{ name: 'Renamed', url: song }])
   wrapper.unmount()
   await setup()

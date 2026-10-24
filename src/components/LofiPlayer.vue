@@ -3,7 +3,8 @@ import { computed, nextTick, ref, watch } from 'vue'
 import type { ComponentPublicInstance } from 'vue'
 import { useLofiPlayer } from '../composables/useLofiPlayer'
 import { LOFI_VIDEO_ID } from '../config/lofi'
-import { musicSourceUrl, parseMusicLink, shuffleSongs } from '../domain/music'
+import { musicLibraryUrl, musicSourceUrl, parseMusicLink, shuffleSongs } from '../domain/music'
+import { fetchMusicTitle } from '../domain/musicTitle'
 import type { MusicSource } from '../domain/music'
 import { useMusicLibrary } from '../composables/useMusicLibrary'
 import type { SavedMusicLink } from '../composables/useMusicLibrary'
@@ -22,6 +23,21 @@ const selected = ref<MusicSource>({ videoId: LOFI_VIDEO_ID })
 const musicLink = ref('')
 const linkError = ref('')
 const linkName = ref('')
+const detectedTitle = ref('')
+const nameEditedForSong = ref('')
+let titleLookup = Promise.resolve('')
+watch(musicLink, (link, _previous, cleanup) => {
+  detectedTitle.value = ''
+  const source = parseMusicLink(link)
+  if (!source) { titleLookup = Promise.resolve(''); return }
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 6000)
+  cleanup(() => { clearTimeout(timeout); controller.abort() })
+  titleLookup = fetchMusicTitle(musicLibraryUrl(source), controller.signal)
+    .then(title => { if (!controller.signal.aborted) detectedTitle.value = title; return title })
+    .finally(() => clearTimeout(timeout))
+}, { flush: 'sync' })
+function markNameEdited() { nameEditedForSong.value = currentSong.value }
 const library = useMusicLibrary(computed(() => props.user))
 const libraryOpen = ref(false)
 const libraryDialog = ref<HTMLDialogElement>()
@@ -47,15 +63,25 @@ async function saveLink() {
     return
   }
   linkError.value = ''
-  await library.save(musicLink.value, linkName.value)
+  const url = musicLink.value
+  const name = linkName.value.trim()
+  const account = props.user?.id
+  const title = name ? '' : await titleLookup
+  if (props.user?.id !== account || musicLink.value !== url) return
+  await library.save(url, name || title)
 }
 async function saveCurrentSong() {
   const url = refreshCurrentSong()
   if (!url) return
-  // Never reuse a playlist or previous song's title for a newly playing song.
+  const source = parseMusicLink(musicLink.value)
+  const sameSong = source?.videoId && musicLibraryUrl(source) === url
+  const typedName = (sameSong || nameEditedForSong.value === url) ? linkName.value.trim() : ''
   musicLink.value = url
-  linkName.value = library.entries.value.find(entry => entry.url === url)?.name ?? ''
-  await library.save(url, linkName.value)
+  const account = props.user?.id
+  const name = typedName || library.entries.value.find(entry => entry.url === url)?.name || await titleLookup
+  if (props.user?.id !== account || currentSong.value !== url) return
+  linkName.value = name
+  await library.save(url, name)
 }
 async function shuffleLibrary() {
   if (props.isRest || library.disabled.value) return
@@ -119,6 +145,7 @@ watch(() => props.user?.id, () => {
   filter.value = 'all'
   musicLink.value = ''
   linkName.value = ''
+  nameEditedForSong.value = ''
   linkError.value = ''
   resumeAfterBreak.value = false
   shuffleActive.value = false
@@ -193,7 +220,8 @@ async function close() {
             <label for="music-link">Song or playlist link</label>
             <input id="music-link" ref="linkInput" v-model="musicLink" type="url" required placeholder="https://music.youtube.com/playlist?list=…" :aria-invalid="!!linkError" aria-describedby="music-help music-link-error" />
             <label for="music-link-name">Name <span class="lofi-caption">(optional)</span></label>
-            <input id="music-link-name" v-model="linkName" maxlength="80" placeholder="e.g. Deep focus playlist" />
+            <input id="music-link-name" v-model="linkName" maxlength="80" :placeholder="detectedTitle || 'Uses the YouTube title when available'" @input="markNameEdited" />
+            <p v-if="detectedTitle && !linkName" class="lofi-message">Detected title: {{ detectedTitle }}</p>
             <div class="music-form-actions">
             <button type="submit" :disabled="isRest">{{ isRest ? 'Available during focus' : 'Play music' }}</button>
             <button v-if="library.available.value" type="button" class="music-save" :disabled="library.disabled.value" @click="saveLink">Save to library</button>

@@ -40,3 +40,8 @@ export function musicSourceUrl(source: MusicSource): string {
   if (source.playlistId) url.searchParams.set('list', source.playlistId)
   return url.href
 }
+
+/** A song has one library identity, even when shared from different playlists. */
+export function musicLibraryUrl(source: MusicSource): string {
+  return musicSourceUrl(source.videoId ? { videoId: source.videoId } : source)
+}

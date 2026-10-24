@@ -50,11 +50,23 @@ it('isolates reads, writes and deletes by verified identity, ignoring supplied u
 it('canonicalizes duplicate links and preserves names on blank updates', async () => {
   await handler(request({ type: 'save', url: song, name: 'Focus' }))
   await handler(request({ type: 'save', url: 'https://youtu.be/abcdefghijk?si=share' }))
+  await handler(request({ type: 'save', url: `${song}&list=PLabcdefghijk` }))
+  await handler(request({ type: 'save', url: `${song}&list=PLlmnopqrstuv` }))
   expect(await (await handler(request())).json()).toEqual({ entries: [{ name: 'Focus', url: song }] })
   await handler(request({ type: 'save', url: song, name: 'New name' }))
   expect(await (await handler(request())).json()).toEqual({ entries: [{ name: 'New name', url: song }] })
   await handler(request({ type: 'remove', url: song }))
   expect(await (await handler(request())).json()).toEqual({ entries: [] })
+})
+
+it('merges existing playlist variants in the migration without mixing accounts', async () => {
+  await db.query('INSERT INTO pomodoro_music_links (user_id, url, name, created_at) VALUES ($1, $2, $3, $4), ($1, $5, $6, $7)',
+    ['alice', song, 'Old', '2026-10-01', `${song}&list=PLabcdefghijk`, 'Newest', '2026-10-02'])
+  await db.query('INSERT INTO pomodoro_music_links (user_id, url, name) VALUES ($1, $2, $3)', ['bob', song, 'Bob'])
+  await db.exec(await readFile(new URL('../../../netlify/database/migrations/20261025090000_unique_music_songs.sql', import.meta.url), 'utf8'))
+  expect((await db.query('SELECT user_id, url, name FROM pomodoro_music_links ORDER BY user_id')).rows).toEqual([
+    { user_id: 'alice', url: song, name: 'Newest' }, { user_id: 'bob', url: song, name: 'Bob' },
+  ])
 })
 
 it('rejects unsafe links, malformed commands and long names', async () => {

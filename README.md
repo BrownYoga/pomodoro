@@ -87,12 +87,18 @@ Sign in to your **Pomodoro account** to use the library. Paste a link, optionall
 enter a name, and choose **Save to library**, or choose **Save current song** to
 capture the song actually playing after a playlist or autoplay advances. This
 updates the text field to that song's standalone link without interrupting playback.
-An unnamed current song is saved with its video ID; enter a name and save again
-to rename it. The external track link also follows the actual playing song.
+An unnamed song uses its YouTube title when metadata is available; your typed
+name takes priority, including when saving the current song after deleting it.
+Unavailable metadata falls back to a video ID so saving still works. The external
+track link also follows the actual playing song. Title lookup uses the same-origin
+`music-title` function (also served by Vite during development).
 
 **Your library** opens a separate modal with search, song/playlist filters,
 play buttons, and deletion. The list stays out of the compact player. Saving an
-existing link updates its name instead of duplicating it; deleting an entry does
+existing song updates its name instead of duplicating it, including short links
+and links to that song in different playlists. Playlist-only links remain separate.
+The database migration merges older duplicate song entries, keeping the newest name.
+Deleting an entry does
 not interrupt current playback. Links can be saved and deleted during breaks.
 
 **Shuffle library** queues each saved individual song once in a shuffled order,

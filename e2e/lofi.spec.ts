@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test'
 import type { YouTubePlayerOptions } from '../src/composables/useLofiPlayer'
 
 test.beforeEach(async ({ page }) => {
+  await page.route('**/.netlify/functions/music-title?*', route => route.fulfill({ json: { title: '' } }))
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.clock.install({ time: new Date('2026-10-21T12:00:00Z') })
   await page.clock.pauseAt(new Date('2026-10-21T12:01:00Z'))
@@ -293,6 +294,29 @@ test('keeps the account library compact, shuffles songs and clears private state
   await page.getByTestId('youtube-music').click()
   await expect(page.getByRole('button', { name: 'Your library (0)', exact: true })).toBeVisible()
   await expect(page.getByLabel('Song or playlist link', { exact: true })).toHaveValue('')
+})
+
+test('detects song titles, respects a typed name after deletion, and prevents duplicate song links', async ({ page }) => {
+  await page.route('**/.netlify/functions/music-title?*', route => route.fulfill({ json: { title: 'Artist - Detected song' } }))
+  await page.getByTestId('youtube-music').click()
+  await page.getByLabel('Song or playlist link', { exact: true }).fill('https://music.youtube.com/watch?v=abcdefghijk&list=PLabcdefghijk')
+  await expect(page.getByText('Detected title: Artist - Detected song', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Play music', exact: true }).click()
+  await page.getByRole('button', { name: 'Save current song', exact: true }).click()
+  await page.getByRole('button', { name: 'Your library (1)', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Play Artist - Detected song', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Delete Artist - Detected song from library', exact: true }).click()
+  await page.getByRole('button', { name: 'Close library', exact: true }).click()
+  await page.getByLabel('Name (optional)', { exact: true }).fill('My chosen title')
+  await page.getByRole('button', { name: 'Save current song', exact: true }).click()
+  for (const link of ['https://youtu.be/abcdefghijk?si=share', 'https://www.youtube.com/watch?v=abcdefghijk&list=PLlmnopqrstuv']) {
+    await page.getByLabel('Song or playlist link', { exact: true }).fill(link)
+    await page.getByRole('button', { name: 'Save to library', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'Your library (1)', exact: true })).toBeVisible()
+  }
+  await page.getByRole('button', { name: 'Your library (1)', exact: true }).click()
+  await expect(page.locator('[data-library-play]')).toHaveCount(1)
+  await expect(page.getByRole('button', { name: 'Play My chosen title', exact: true })).toBeVisible()
 })
 
 test('tests the local development library without signing in', async ({ page }) => {

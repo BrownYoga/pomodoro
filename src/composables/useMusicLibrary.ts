@@ -1,7 +1,7 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import type { Ref } from 'vue'
 import { refreshSession } from '@netlify/identity'
-import { musicSourceUrl, parseMusicLink } from '../domain/music'
+import { musicLibraryUrl, parseMusicLink } from '../domain/music'
 
 export interface SavedMusicLink { name: string; url: string }
 export type MusicAccount = { id: string } | null | undefined
@@ -29,7 +29,7 @@ export function useMusicLibrary(user: Readonly<Ref<MusicAccount>>) {
         if (!entry || typeof entry.name !== 'string' || typeof entry.url !== 'string') continue
         const source = parseMusicLink(entry.url)
         if (!source) continue
-        const url = musicSourceUrl(source)
+        const url = musicLibraryUrl(source)
         unique.set(url, { url, name: entry.name.trim().slice(0, 80) || 'Saved music' })
       }
       entries.value = [...unique.values()]
@@ -99,7 +99,7 @@ export function useMusicLibrary(user: Readonly<Ref<MusicAccount>>) {
   async function save(link: string, name: string) {
     const source = parseMusicLink(link)
     if (!source || name.trim().length > 80) return false
-    return request({ type: 'save', url: musicSourceUrl(source), name: name.trim() })
+    return request({ type: 'save', url: musicLibraryUrl(source), name: name.trim() })
   }
   async function remove(url: string) { return request({ type: 'remove', url }) }
 
