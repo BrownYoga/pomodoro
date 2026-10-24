@@ -64,6 +64,33 @@ settings through Netlify Database.
 
 ## Optional study music
 
+**YouTube Music** opens a song/playlist panel next to **Play Lo-fi**. Copy a
+YouTube Music or YouTube share link and select **Play music**. Public or unlisted
+embeddable content plays in the visible YouTube player, with volume, pause/resume,
+voice-cue quieting, and the same focus/break behavior as lo-fi. Only one source
+plays at a time. Resuming a paused song keeps its position; restarting after a
+break recreates the player from the submitted song or playlist's beginning.
+The last valid link is saved in this browser when storage is available; music
+never starts automatically on page load. Opening the panel alone loads no YouTube
+scripts. Private, restricted, or Music-only tracks may not play in embeds; use
+the external YouTube Music links as a fallback.
+
+To build a library, paste a link, optionally enter a name, and choose **Save to
+library**. Select a saved entry to play it during focus, or **Delete** to remove
+it. Saving an existing link updates its name instead of creating a duplicate.
+Deleting an entry does not interrupt current playback. Links can be saved and
+deleted during breaks. The library persists in this browser across reloads;
+it is not synced to an account or other devices. If browser storage is unavailable,
+changes stay usable for the current visit and a message explains they may be lost.
+
+This first version is available without a subscription. It does not link Google
+accounts or import a personal Music library. The official YouTube IFrame API
+provides playback; YouTube Data API account access would require a Google Cloud
+OAuth client, consent configuration, and a separate implementation. Authorizing
+the Data API does not sign the embedded player into a YouTube Music subscription.
+See [player support](https://developers.google.com/youtube/player_parameters) and
+[Google OAuth requirements](https://developers.google.com/youtube/data/guides/authentication).
+
 Use **Play Lo-fi** in the bottom-left corner to open Lofi Girl's official YouTube
 study radio. Nothing from YouTube loads until you choose music. Pause/resume and
 volume affect music only; stopping closes and destroys the player. Breaks also close

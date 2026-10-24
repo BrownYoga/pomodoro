@@ -1,5 +1,6 @@
 import { nextTick, onUnmounted, ref } from 'vue'
 import { LOFI_VIDEO_ID } from '../config/lofi'
+import type { MusicSource } from '../domain/music'
 
 export interface YouTubePlayer {
   playVideo(): void
@@ -10,10 +11,10 @@ export interface YouTubePlayer {
   seekTo(seconds: number, allowSeekAhead: boolean): void
 }
 export interface YouTubePlayerOptions {
-  videoId: string
+  videoId?: string
   width: string
   height: string
-  playerVars: { playsinline: number; origin: string; autoplay: number; controls: number }
+  playerVars: { playsinline: number; origin: string; autoplay: number; controls: number; listType?: 'playlist'; list?: string }
   events: {
     onReady(event: { target: YouTubePlayer }): void
     onStateChange(event: { data: number }): void
@@ -68,7 +69,7 @@ export function loadYouTubeAPI(): Promise<YouTubeAPI> {
   return apiPromise
 }
 
-export function useLofiPlayer() {
+export function useLofiPlayer(source: () => MusicSource = () => ({ videoId: LOFI_VIDEO_ID }), liveRadio: () => boolean = () => true) {
   const expanded = ref(false)
   const host = ref<HTMLElement>()
   const state = ref<'inactive' | 'loading' | 'playing' | 'paused' | 'blocked' | 'error'>('inactive')
@@ -111,8 +112,10 @@ export function useLofiPlayer() {
     try {
       // For live events duration is elapsed broadcast time, not an exact live-edge API.
       // YouTube clamps this best-effort seek to its available playback window.
-      const duration = player.getDuration()
-      if (Number.isFinite(duration) && duration > 0) player.seekTo(duration, true)
+      if (liveRadio()) {
+        const duration = player.getDuration()
+        if (Number.isFinite(duration) && duration > 0) player.seekTo(duration, true)
+      }
       player.playVideo()
     } catch { fail('YouTube playback failed. Try again or open the stream on YouTube.') }
   }
@@ -133,9 +136,11 @@ export function useLofiPlayer() {
       readyTimeout = window.setTimeout(() => {
         if (token === generation) fail('YouTube took too long to load. Try again or open the stream on YouTube.')
       }, 15000)
+      const selected = source()
       player = new api.Player(target, {
-        videoId: LOFI_VIDEO_ID, width: '100%', height: '100%',
-        playerVars: { playsinline: 1, origin: window.location.origin, autoplay: 0, controls: 1 },
+        videoId: selected.videoId, width: '100%', height: '100%',
+        playerVars: { playsinline: 1, origin: window.location.origin, autoplay: 0, controls: 1,
+          ...(selected.playlistId ? { listType: 'playlist' as const, list: selected.playlistId } : {}) },
         events: {
           onReady: (event) => {
             if (token !== generation || state.value === 'error') return
@@ -150,7 +155,7 @@ export function useLofiPlayer() {
             if (data === 1 || data === 2 || data === 0) {
               clearTimeout(playbackTimeout)
               state.value = data === 1 ? 'playing' : 'paused'
-              message.value = data === 0 ? 'The stream has ended. You can try again or open YouTube.' : ''
+              message.value = data === 0 ? 'Playback ended. You can play again or open YouTube.' : ''
             }
           },
           onAutoplayBlocked: () => { if (token === generation && state.value !== 'error') blocked() },
