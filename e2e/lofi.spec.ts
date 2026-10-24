@@ -41,6 +41,9 @@ test.beforeEach(async ({ page }) => {
         this.options = options
         this.frame = document.createElement('iframe')
         this.frame.title = 'Lofi Girl study radio'
+        this.frame.dataset.video = options.videoId ?? 'abcdefghijk'
+        this.frame.dataset.queue = options.playerVars.playlist ?? ''
+        this.frame.addEventListener('test-ended', () => this.nextVideo())
         element.replaceWith(this.frame)
         queueMicrotask(() => options.events.onReady({ target: this }))
       }
@@ -50,6 +53,16 @@ test.beforeEach(async ({ page }) => {
       setVolume(value: number) { this.frame.dataset.volume = String(value) }
       getDuration() { return 1000 }
       seekTo(value: number) { this.frame.dataset.seek = String(value) }
+      getVideoUrl() { return `https://www.youtube.com/watch?v=${this.frame.dataset.video}` }
+      nextVideo() {
+        const queue = this.frame.dataset.queue?.split(',').filter(Boolean) ?? []
+        const id = queue.shift()
+        if (id) {
+          this.frame.dataset.video = id
+          this.frame.dataset.queue = queue.join(',')
+          this.options.events.onStateChange({ data: 1 })
+        }
+      }
     } }
   })
   await page.goto('/')
@@ -206,24 +219,78 @@ test('opens YouTube Music on mobile, plays a link and restores focus when closed
   await expect(frame).toHaveCount(0)
 })
 
-test('saves a named library across reloads and persists deletion', async ({ page }) => {
+test('keeps the account library compact, shuffles songs and clears private state on sign-out', async ({ page }) => {
+  const account = { id: 'music-user', email: 'music@example.com', user_metadata: { full_name: 'Music Tester' }, app_metadata: { provider: 'email' } }
+  const jwt = `${Buffer.from('{"alg":"HS256","typ":"JWT"}').toString('base64url')}.${Buffer.from(JSON.stringify({ sub: account.id, exp: 4_000_000_000 })).toString('base64url')}.test-signature`
+  let entries: { name: string; url: string }[] = []
+  await page.route('**/.netlify/identity/**', async route => {
+    const path = new URL(route.request().url()).pathname.split('/').at(-1)
+    const json = path === 'settings' ? { autoconfirm: false, external: { email: true } }
+      : path === 'token' ? { access_token: jwt, refresh_token: 'test-refresh', token_type: 'bearer', expires_in: 3600 }
+        : path === 'user' ? account : {}
+    await route.fulfill({ json })
+  })
+  await page.route('**/.netlify/functions/music-library', async route => {
+    if (route.request().method() === 'POST') {
+      const command = route.request().postDataJSON()
+      entries = entries.filter(entry => entry.url !== command.url)
+      if (command.type === 'save') entries.push({ name: command.name || 'Saved song', url: command.url })
+    }
+    await route.fulfill({ json: { entries } })
+  })
   await page.setViewportSize({ width: 375, height: 812 })
+  await page.getByTestId('youtube-music').click()
+  await expect(page.getByRole('button', { name: 'Save to library', exact: true })).toHaveCount(0)
+  await page.getByTestId('lofi-panel').getByRole('button', { name: 'Sign in', exact: true }).click()
+  await page.getByTestId('auth-email').fill('music@example.com')
+  await page.getByTestId('auth-password').fill('test-password')
+  await page.getByTestId('auth-submit').click()
+  await expect(page.getByTestId('account-dialog')).not.toBeVisible()
   await page.getByTestId('youtube-music').click()
   await page.getByLabel('Song or playlist link', { exact: true }).fill('https://music.youtube.com/playlist?list=PLabcdefghijk')
   await page.getByLabel('Name (optional)', { exact: true }).fill('My focus mix')
   await page.getByRole('button', { name: 'Save to library', exact: true }).click()
-  await expect(page.getByRole('button', { name: 'Play My focus mix', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Your library (1)', exact: true })).toBeVisible()
+  await expect(page.getByRole('dialog', { name: 'Your library' })).toHaveCount(0)
   await expect(page.locator('iframe')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Your library (1)', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Play My focus mix', exact: true })).toBeVisible()
   await page.clock.runFor(250)
   await page.screenshot({ path: 'test-results/music-library-mobile.png', fullPage: true })
   await page.reload()
+  await expect(page.getByTestId('account-email')).toHaveText('Music Tester')
   await page.getByTestId('youtube-music').click()
+  await page.getByRole('button', { name: 'Your library (1)', exact: true }).click()
   await page.getByRole('button', { name: 'Play My focus mix', exact: true }).click()
   await expect(page.locator('iframe')).toHaveAttribute('data-playing', 'true')
+  await page.getByRole('button', { name: 'Your library (1)', exact: true }).click()
   await page.getByRole('button', { name: 'Delete My focus mix from library', exact: true }).click()
   await expect(page.locator('iframe')).toHaveAttribute('data-playing', 'true')
-  await page.reload()
-  await page.getByTestId('youtube-music').click()
   await expect(page.getByRole('button', { name: 'Play My focus mix', exact: true })).toHaveCount(0)
   await expect(page.getByText('Save your favourite songs and playlists for next time.')).toBeVisible()
+  await page.getByRole('button', { name: 'Close library', exact: true }).click()
+  for (const [id, name] of [['abcdefghijk', 'First song'], ['lmnopqrstuv', 'Second song']]) {
+    await page.getByLabel('Song or playlist link', { exact: true }).fill(`https://music.youtube.com/watch?v=${id}`)
+    await page.getByLabel('Name (optional)', { exact: true }).fill(name!)
+    await page.getByRole('button', { name: 'Save to library', exact: true }).click()
+    await expect(page.getByText('Saved to your account library.', { exact: true })).toBeVisible()
+  }
+  await page.getByRole('button', { name: 'Shuffle library', exact: true }).click()
+  const frame = page.locator('iframe')
+  await expect(frame).toHaveAttribute('data-playing', 'true')
+  const first = await frame.getAttribute('data-video')
+  await page.getByRole('button', { name: 'Next song', exact: true }).click()
+  await expect(frame).not.toHaveAttribute('data-video', first!)
+  await page.getByRole('button', { name: 'Your library (2)', exact: true }).click()
+  await page.getByLabel('Search your library', { exact: true }).fill('Second')
+  await expect(page.getByRole('button', { name: 'Play First song', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Play Second song', exact: true })).toBeVisible()
+  await page.getByLabel('Search your library', { exact: true }).fill('')
+  await page.screenshot({ path: 'test-results/music-library-mobile.png', fullPage: true })
+  await page.getByRole('button', { name: 'Close library', exact: true }).click()
+  await page.getByTestId('sign-out').click()
+  await expect(page.locator('iframe')).toHaveCount(0)
+  await page.getByTestId('youtube-music').click()
+  await expect(page.getByRole('button', { name: /Your library/ })).toHaveCount(0)
+  await expect(page.getByLabel('Song or playlist link', { exact: true })).toHaveValue('')
 })

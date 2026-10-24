@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { musicSourceUrl, parseMusicLink } from '../../domain/music'
+import { musicSourceUrl, parseMusicLink, shuffleSongs } from '../../domain/music'
 
 it.each([
   'https://music.youtube.com/watch?v=abcdefghijk&si=share',
@@ -25,4 +25,15 @@ it.each([
   'https://youtube.com/redirect?v=abcdefghijk',
 ])('rejects invalid or unrelated links: %s', link => {
   expect(parseMusicLink(link)).toBeUndefined()
+})
+
+it('shuffles individual songs once each, excluding playlist-only links and deduplicating songs', () => {
+  const links = [
+    { url: 'https://music.youtube.com/watch?v=abcdefghijk' },
+    { url: 'https://youtu.be/abcdefghijk' },
+    { url: 'https://music.youtube.com/watch?v=lmnopqrstuv&list=PLabcdefghijk' },
+    { url: 'https://music.youtube.com/playlist?list=PLabcdefghijk' },
+  ]
+  expect(shuffleSongs(links, () => 0)).toEqual(['lmnopqrstuv', 'abcdefghijk'])
+  expect(shuffleSongs([])).toEqual([])
 })

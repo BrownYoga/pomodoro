@@ -1,5 +1,6 @@
 import { nextTick, onUnmounted, ref } from 'vue'
 import { LOFI_VIDEO_ID } from '../config/lofi'
+import { musicSourceUrl, parseMusicLink } from '../domain/music'
 import type { MusicSource } from '../domain/music'
 
 export interface YouTubePlayer {
@@ -9,12 +10,14 @@ export interface YouTubePlayer {
   setVolume(volume: number): void
   getDuration(): number
   seekTo(seconds: number, allowSeekAhead: boolean): void
+  getVideoUrl(): string
+  nextVideo(): void
 }
 export interface YouTubePlayerOptions {
   videoId?: string
   width: string
   height: string
-  playerVars: { playsinline: number; origin: string; autoplay: number; controls: number; listType?: 'playlist'; list?: string }
+  playerVars: { playsinline: number; origin: string; autoplay: number; controls: number; listType?: 'playlist'; list?: string; playlist?: string }
   events: {
     onReady(event: { target: YouTubePlayer }): void
     onStateChange(event: { data: number }): void
@@ -76,6 +79,7 @@ export function useLofiPlayer(source: () => MusicSource = () => ({ videoId: LOFI
   const message = ref('')
   const volume = ref(50)
   const quiet = ref(false)
+  const currentSong = ref('')
   let musicLevel = 1
   let fadeInterval: ReturnType<typeof setInterval> | undefined
   let player: YouTubePlayer | undefined
@@ -83,6 +87,18 @@ export function useLofiPlayer(source: () => MusicSource = () => ({ videoId: LOFI
   let generation = 0
   let readyTimeout: number | undefined
   let playbackTimeout: number | undefined
+
+  function refreshCurrentSong() {
+    try {
+      const current = ready ? parseMusicLink(player?.getVideoUrl() ?? '') : undefined
+      currentSong.value = current?.videoId ? musicSourceUrl({ videoId: current.videoId }) : ''
+    } catch { currentSong.value = '' }
+    return currentSong.value
+  }
+  function next() {
+    if (!ready) return
+    try { player?.nextVideo() } catch { fail('Could not skip this song. Try the YouTube controls.') }
+  }
 
   function clearTimeouts() {
     clearTimeout(readyTimeout)
@@ -140,6 +156,7 @@ export function useLofiPlayer(source: () => MusicSource = () => ({ videoId: LOFI
       player = new api.Player(target, {
         videoId: selected.videoId, width: '100%', height: '100%',
         playerVars: { playsinline: 1, origin: window.location.origin, autoplay: 0, controls: 1,
+          ...(selected.queue?.length ? { playlist: selected.queue.join(',') } : {}),
           ...(selected.playlistId ? { listType: 'playlist' as const, list: selected.playlistId } : {}) },
         events: {
           onReady: (event) => {
@@ -147,12 +164,14 @@ export function useLofiPlayer(source: () => MusicSource = () => ({ videoId: LOFI
             clearTimeout(readyTimeout)
             player = event.target
             ready = true
+            refreshCurrentSong()
             try { player.setVolume(volume.value * musicLevel); playAtLiveEdge() }
             catch { fail('YouTube playback failed. Please try again.') }
           },
           onStateChange: ({ data }) => {
             if (token !== generation || state.value === 'error') return
             if (data === 1 || data === 2 || data === 0) {
+              refreshCurrentSong()
               clearTimeout(playbackTimeout)
               state.value = data === 1 ? 'playing' : 'paused'
               message.value = data === 0 ? 'Playback ended. You can play again or open YouTube.' : ''
@@ -208,8 +227,9 @@ export function useLofiPlayer(source: () => MusicSource = () => ({ videoId: LOFI
     ready = false
     expanded.value = false
     state.value = 'inactive'
+    currentSong.value = ''
     message.value = ''
   }
   onUnmounted(stop)
-  return { expanded, host, state, message, volume, quiet, play, pause, stop, setVolume, setQuiet }
+  return { expanded, host, state, message, volume, quiet, currentSong, refreshCurrentSong, next, play, pause, stop, setVolume, setQuiet }
 }

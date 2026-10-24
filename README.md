@@ -70,18 +70,42 @@ embeddable content plays in the visible YouTube player, with volume, pause/resum
 voice-cue quieting, and the same focus/break behavior as lo-fi. Only one source
 plays at a time. Resuming a paused song keeps its position; restarting after a
 break recreates the player from the submitted song or playlist's beginning.
-The last valid link is saved in this browser when storage is available; music
-never starts automatically on page load. Opening the panel alone loads no YouTube
+Music never starts automatically on page load. Opening the panel alone loads no YouTube
 scripts. Private, restricted, or Music-only tracks may not play in embeds; use
 the external YouTube Music links as a fallback.
 
-To build a library, paste a link, optionally enter a name, and choose **Save to
-library**. Select a saved entry to play it during focus, or **Delete** to remove
-it. Saving an existing link updates its name instead of creating a duplicate.
-Deleting an entry does not interrupt current playback. Links can be saved and
-deleted during breaks. The library persists in this browser across reloads;
-it is not synced to an account or other devices. If browser storage is unavailable,
-changes stay usable for the current visit and a message explains they may be lost.
+Sign in to your **Pomodoro account** to use the library. Paste a link, optionally
+enter a name, and choose **Save to library**, or choose **Save current song** to
+capture the song actually playing after a playlist or autoplay advances. This
+updates the text field to that song's standalone link without interrupting playback.
+An unnamed current song is saved with its video ID; enter a name and save again
+to rename it. The external track link also follows the actual playing song.
+
+**Your library** opens a separate modal with search, song/playlist filters,
+play buttons, and deletion. The list stays out of the compact player. Saving an
+existing link updates its name instead of duplicating it; deleting an entry does
+not interrupt current playback. Links can be saved and deleted during breaks.
+
+**Shuffle library** queues each saved individual song once in a shuffled order,
+without its original playlist/radio context. Playlist-only links are excluded
+and can be played separately. YouTube's native playlist handles progression;
+**Next song** skips within the queue. The remaining queue survives a focus break,
+restarting the current song when focus resumes. YouTube controls playback
+availability, autoplay restrictions, and recommendations after the queue ends;
+the app cannot guarantee personalised recommendations afterward.
+
+Library entries are stored in Netlify Database, scoped to the server-verified
+Identity user ID, and load on sign-in or reload on another device. Guests can
+play links but cannot access a saved library. Signing out or switching accounts
+clears library data, input fields, and YouTube playback. No library data or last
+link is read from shared browser storage; the previous guest library is not
+automatically assigned to whichever account next signs in. Failed writes are
+reported and do not pretend to have saved. Authentication is refreshed once after
+a 401; if it still fails, the private list is cleared and sign-in is requested.
+Use **Retry library** if the initial load fails. Library reads/writes use the
+`/.netlify/functions/music-library` function and the
+`20261024120000_music_library.sql` migration. This backend requires Netlify;
+plain Vite only supports guest music playback.
 
 This first version is available without a subscription. It does not link Google
 accounts or import a personal Music library. The official YouTube IFrame API

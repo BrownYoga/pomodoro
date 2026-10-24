@@ -14,9 +14,20 @@ const create = vi.fn()
 beforeEach(() => {
   vi.useFakeTimers()
   localStorage.clear()
+  let entries: { name: string; url: string }[] = []
+  vi.stubGlobal('fetch', vi.fn(async (_url: string, options?: RequestInit) => {
+    if (options?.body) {
+      const command = JSON.parse(options.body as string)
+      entries = entries.filter(entry => entry.url !== command.url)
+      if (command.type === 'save') entries.push({ name: command.name || 'Saved song', url: command.url })
+    }
+    return new Response(JSON.stringify({ entries }))
+  }))
+  Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value: function () { this.setAttribute('open', '') } })
   player = {
     playVideo: vi.fn(), pauseVideo: vi.fn(), destroy: vi.fn(),
     setVolume: vi.fn(), getDuration: vi.fn(() => 1000), seekTo: vi.fn(),
+    getVideoUrl: vi.fn(() => 'https://www.youtube.com/watch?v=abcdefghijk'), nextVideo: vi.fn(),
   }
   create.mockReset()
   window.YT = { Player: vi.fn(function (_element: HTMLElement, options: YouTubePlayerOptions) {
@@ -25,7 +36,7 @@ beforeEach(() => {
       return player
     }) as unknown as NonNullable<typeof window.YT>['Player'] }
 })
-afterEach(() => { vi.useRealTimers(); delete window.YT })
+afterEach(() => { vi.useRealTimers(); delete window.YT; vi.unstubAllGlobals() })
 
 async function play(wrapper: ReturnType<typeof mount>) {
   await wrapper.get('[data-testid="lofi-play"]').trigger('click')
@@ -258,7 +269,7 @@ it('switches from lo-fi to a playlist, preserves song position on resume, and re
   await flushPromises()
   expect(create).toHaveBeenCalledTimes(3)
   expect(create).toHaveBeenLastCalledWith(expect.objectContaining({ playerVars: expect.objectContaining({ list: 'PLabcdefghijk' }) }))
-  expect(localStorage.getItem('pomodoro-youtube-music-link')).toBe('https://music.youtube.com/playlist?list=PLabcdefghijk')
+  expect(localStorage.getItem('pomodoro-youtube-music-link')).toBeNull()
 })
 
 it('does not play music during breaks and restores lo-fi when selected', async () => {
@@ -274,11 +285,14 @@ it('does not play music during breaks and restores lo-fi when selected', async (
 })
 
 it('saves during breaks, plays a library entry during focus, and deletes without stopping playback', async () => {
-  const wrapper = mount(LofiPlayer, { props: { isRest: true } })
+  const wrapper = mount(LofiPlayer, { props: { isRest: true, user: { id: 'alice' } } })
+  await flushPromises()
   await wrapper.get('[data-testid="youtube-music"]').trigger('click')
   await wrapper.get('#music-link').setValue('https://music.youtube.com/watch?v=abcdefghijk')
   await wrapper.get('#music-link-name').setValue('Deep focus')
   await wrapper.get('.music-save').trigger('click')
+  await flushPromises()
+  await wrapper.get('[aria-haspopup="dialog"]').trigger('click')
   expect(wrapper.get('#music-library').text()).toContain('Deep focus')
   expect(wrapper.get('[data-library-play]').attributes('disabled')).toBeDefined()
   expect(create).not.toHaveBeenCalled()
@@ -289,8 +303,63 @@ it('saves during breaks, plays a library entry during focus, and deletes without
   events.onReady({ target: player })
   events.onStateChange({ data: 1 })
   await flushPromises()
+  await wrapper.get('[aria-haspopup="dialog"]').trigger('click')
   await wrapper.get('.music-delete').trigger('click')
+  await flushPromises()
   expect(wrapper.find('[data-library-play]').exists()).toBe(false)
   expect(player.destroy).not.toHaveBeenCalled()
-  expect(JSON.parse(localStorage.getItem('pomodoro-music-library-v1')!)).toEqual([])
+  expect(localStorage.getItem('pomodoro-music-library-v1')).toBeNull()
+})
+
+it('saves the actual playing song after autoplay advances and clears private UI on sign-out', async () => {
+  const wrapper = mount(LofiPlayer, { props: { user: { id: 'alice' } } })
+  await flushPromises()
+  await wrapper.get('[data-testid="youtube-music"]').trigger('click')
+  await wrapper.get('#music-link').setValue('https://music.youtube.com/watch?v=abcdefghijk')
+  await wrapper.get('form').trigger('submit')
+  await flushPromises()
+  events.onReady({ target: player })
+  vi.mocked(player.getVideoUrl).mockReturnValue('https://www.youtube.com/watch?v=lmnopqrstuv&list=PLabcdefghijk')
+  events.onStateChange({ data: 1 })
+  await flushPromises()
+  await wrapper.get('.music-playback button:last-child').trigger('click')
+  await flushPromises()
+  expect(wrapper.get('#music-link').element).toHaveProperty('value', 'https://music.youtube.com/watch?v=lmnopqrstuv')
+  expect(vi.mocked(fetch).mock.calls.at(-1)?.[1]?.body).toContain('lmnopqrstuv')
+  await wrapper.get('[aria-haspopup="dialog"]').trigger('click')
+  expect(wrapper.find('#music-library').exists()).toBe(true)
+  await wrapper.setProps({ user: null })
+  expect(wrapper.find('#music-library').exists()).toBe(false)
+  expect(wrapper.find('[data-testid="lofi-panel"]').exists()).toBe(false)
+  expect(player.destroy).toHaveBeenCalledOnce()
+})
+
+it('queues saved songs for shuffle, skips through that queue, and retains the remaining queue after a break', async () => {
+  vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ entries: [
+    { name: 'One', url: 'https://music.youtube.com/watch?v=abcdefghijk' },
+    { name: 'Two', url: 'https://music.youtube.com/watch?v=lmnopqrstuv' },
+    { name: 'Playlist', url: 'https://music.youtube.com/playlist?list=PLabcdefghijk' },
+  ] })))
+  const wrapper = mount(LofiPlayer, { props: { user: { id: 'alice' } } })
+  await flushPromises()
+  await wrapper.get('[data-testid="youtube-music"]').trigger('click')
+  expect(wrapper.find('#music-library').exists()).toBe(false)
+  await wrapper.get('.library-toolbar button:last-child').trigger('click')
+  await flushPromises()
+  const options = create.mock.calls[0]![0] as YouTubePlayerOptions
+  expect(new Set([options.videoId, options.playerVars.playlist])).toEqual(new Set(['abcdefghijk', 'lmnopqrstuv']))
+  expect(options.playerVars.list).toBeUndefined()
+  vi.mocked(player.getVideoUrl).mockReturnValue(`https://www.youtube.com/watch?v=${options.videoId}`)
+  events.onReady({ target: player })
+  events.onStateChange({ data: 1 })
+  await flushPromises()
+  const nextButton = wrapper.findAll('.music-playback button').find(button => button.text() === 'Next song')!
+  await nextButton.trigger('click')
+  expect(player.nextVideo).toHaveBeenCalledOnce()
+  vi.mocked(player.getVideoUrl).mockReturnValue(`https://www.youtube.com/watch?v=${options.playerVars.playlist}`)
+  events.onStateChange({ data: 1 })
+  await wrapper.setProps({ isRest: true })
+  await wrapper.setProps({ isRest: false, focusRunning: true })
+  await flushPromises()
+  expect(create).toHaveBeenLastCalledWith(expect.objectContaining({ videoId: options.playerVars.playlist, playerVars: expect.not.objectContaining({ playlist: expect.any(String) }) }))
 })

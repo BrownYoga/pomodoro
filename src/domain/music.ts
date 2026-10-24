@@ -1,6 +1,19 @@
 export interface MusicSource {
   videoId?: string
   playlistId?: string
+  queue?: string[]
+}
+
+export function shuffleSongs(links: { url: string }[], random = Math.random): string[] {
+  const ids = [...new Set(links.flatMap(link => {
+    const id = parseMusicLink(link.url)?.videoId
+    return id ? [id] : []
+  }))]
+  for (let index = ids.length - 1; index > 0; index--) {
+    const target = Math.floor(random() * (index + 1))
+    ;[ids[index], ids[target]] = [ids[target]!, ids[index]!]
+  }
+  return ids
 }
 
 /** Accept share links only; never use arbitrary URLs as player or link targets. */
