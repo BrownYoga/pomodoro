@@ -175,7 +175,7 @@ async function close() {
           <button aria-label="Stop music and close player" data-testid="lofi-stop" @click="close">×</button>
         </div>
         <template v-if="isYouTube">
-          <div v-if="user" class="library-toolbar">
+          <div v-if="library.available.value" class="library-toolbar">
             <button ref="libraryButton" type="button" aria-haspopup="dialog" @click="libraryOpen = true">Your library ({{ library.entries.value.length }})</button>
             <button type="button" :disabled="isRest || library.disabled.value || !songCount" @click="shuffleLibrary">Shuffle library</button>
           </div>
@@ -187,7 +187,7 @@ async function close() {
             <input id="music-link-name" v-model="linkName" maxlength="80" placeholder="e.g. Deep focus playlist" />
             <div class="music-form-actions">
             <button type="submit" :disabled="isRest">{{ isRest ? 'Available during focus' : 'Play music' }}</button>
-            <button v-if="user" type="button" class="music-save" :disabled="library.disabled.value" @click="saveLink">Save to library</button>
+            <button v-if="library.available.value" type="button" class="music-save" :disabled="library.disabled.value" @click="saveLink">Save to library</button>
             </div>
           </form>
           <p v-if="linkError" id="music-link-error" class="lofi-message music-error" role="alert">{{ linkError }}</p>
@@ -196,7 +196,7 @@ async function close() {
           <a href="https://music.youtube.com/" target="_blank" rel="noopener noreferrer">Open YouTube Music ↗</a>
           <p v-if="library.notice.value" class="lofi-message" role="status">{{ library.notice.value }}</p>
           <button v-if="user && library.expired.value" class="music-signin" @click="emit('signIn')">Sign in again</button>
-          <button v-else-if="user && !library.ready.value && !library.busy.value" class="music-signin" @click="library.reload">Retry library</button>
+          <button v-else-if="library.available.value && !library.ready.value && !library.busy.value" class="music-signin" @click="library.reload">Retry library</button>
         </template>
         <div v-if="state !== 'inactive'" :ref="setHost" class="lofi-video" />
         <div v-if="state !== 'inactive'" class="lofi-volume">
@@ -209,15 +209,15 @@ async function close() {
           <button v-if="state === 'playing'" @click="resumeAfterBreak = false; pause()">Pause music</button>
           <button v-else :disabled="isRest || state === 'loading'" @click="play">{{ state === 'loading' ? 'Loading…' : 'Resume music' }}</button>
           <button v-if="shuffleActive" :disabled="isRest || state === 'loading' || state === 'error'" @click="next">Next song</button>
-          <button v-if="user" :disabled="library.disabled.value || !currentSong" @click="saveCurrentSong">Save current song</button>
+          <button v-if="library.available.value" :disabled="library.disabled.value || !currentSong" @click="saveCurrentSong">Save current song</button>
         </div>
         <p v-if="isYouTube && shuffleActive" class="lofi-message">Playing your saved songs in shuffled order. YouTube controls recommendations after the queue ends.</p>
         <a v-if="state !== 'inactive'" :href="sourceUrl" target="_blank" rel="noopener noreferrer">{{ isYouTube ? 'Open track or playlist' : 'Open on YouTube' }} ↗</a>
       </section>
     </Transition>
-    <dialog v-if="libraryOpen && user" id="music-library" ref="libraryDialog" class="music-library" aria-labelledby="music-library-title" @cancel.prevent="closeLibrary" @close="libraryOpen = false" @keydown.esc.stop>
+    <dialog v-if="libraryOpen && library.available.value" id="music-library" ref="libraryDialog" class="music-library" aria-labelledby="music-library-title" @cancel.prevent="closeLibrary" @close="libraryOpen = false" @keydown.esc.stop>
       <div class="lofi-heading"><h3 id="music-library-title">Your library ({{ library.entries.value.length }})</h3><button aria-label="Close library" @click="closeLibrary">×</button></div>
-      <p class="lofi-message">Private to your Pomodoro account.</p>
+      <p class="lofi-message">{{ library.localDev.value ? 'Development library · saved in this browser. No sign-in needed.' : 'Private to your Pomodoro account.' }}</p>
       <div class="library-filters">
         <label for="library-search">Search your library</label>
         <input id="library-search" v-model="search" type="search" autofocus placeholder="Find a song or playlist" />

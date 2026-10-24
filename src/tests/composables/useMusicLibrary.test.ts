@@ -18,12 +18,14 @@ async function setup() {
   await flushPromises()
 }
 beforeEach(() => {
+  vi.stubEnv('DEV', false)
+  localStorage.clear()
   user.value = null
   fetchMock.mockReset().mockResolvedValue(response())
   vi.stubGlobal('fetch', fetchMock)
   vi.mocked(refreshSession).mockResolvedValue('renewed')
 })
-afterEach(() => { wrapper?.unmount(); vi.unstubAllGlobals() })
+afterEach(() => { wrapper?.unmount(); vi.unstubAllGlobals(); vi.unstubAllEnvs() })
 
 it('never loads shared browser storage or contacts the API for guests', async () => {
   localStorage.setItem('pomodoro-music-library-v1', JSON.stringify([{ name: 'Someone else', url: song }]))
@@ -89,4 +91,36 @@ it('refreshes expired authentication once and hides private entries if still rej
   await flushPromises()
   expect(library.expired.value).toBe(false)
   expect(library.entries.value).toHaveLength(1)
+})
+
+it('supports a persistent guest development library without any API or authentication calls', async () => {
+  vi.stubEnv('DEV', true)
+  await setup()
+  expect(library.localDev.value).toBe(true)
+  expect(library.disabled.value).toBe(false)
+  await library.save(song, 'Dev focus')
+  await library.save('https://youtu.be/abcdefghijk', 'Renamed')
+  expect(library.entries.value).toEqual([{ name: 'Renamed', url: song }])
+  wrapper.unmount()
+  await setup()
+  expect(library.entries.value).toEqual([{ name: 'Renamed', url: song }])
+  await library.remove(song)
+  wrapper.unmount()
+  await setup()
+  expect(library.entries.value).toEqual([])
+  expect(fetchMock).not.toHaveBeenCalled()
+})
+
+it('keeps the development library separate from account data on sign-in and sign-out', async () => {
+  vi.stubEnv('DEV', true)
+  await setup()
+  await library.save(song, 'Dev only')
+  user.value = { id: 'alice' }
+  expect(library.entries.value).toEqual([])
+  await flushPromises()
+  expect(library.localDev.value).toBe(false)
+  expect(library.entries.value).toEqual([])
+  user.value = null
+  expect(library.localDev.value).toBe(true)
+  expect(library.entries.value).toEqual([{ name: 'Dev only', url: song }])
 })

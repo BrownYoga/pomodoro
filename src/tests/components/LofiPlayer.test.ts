@@ -12,6 +12,7 @@ let player: YouTubePlayer
 const create = vi.fn()
 
 beforeEach(() => {
+  vi.stubEnv('DEV', false)
   vi.useFakeTimers()
   localStorage.clear()
   let entries: { name: string; url: string }[] = []
@@ -36,7 +37,7 @@ beforeEach(() => {
       return player
     }) as unknown as NonNullable<typeof window.YT>['Player'] }
 })
-afterEach(() => { vi.useRealTimers(); delete window.YT; vi.unstubAllGlobals() })
+afterEach(() => { vi.useRealTimers(); delete window.YT; vi.unstubAllGlobals(); vi.unstubAllEnvs() })
 
 async function play(wrapper: ReturnType<typeof mount>) {
   await wrapper.get('[data-testid="lofi-play"]').trigger('click')

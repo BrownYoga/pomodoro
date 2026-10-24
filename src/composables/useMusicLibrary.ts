@@ -5,6 +5,7 @@ import { musicSourceUrl, parseMusicLink } from '../domain/music'
 
 export interface SavedMusicLink { name: string; url: string }
 export type MusicAccount = { id: string } | null | undefined
+const devStorageKey = 'pomodoro-dev-music-library-v1'
 
 export function useMusicLibrary(user: Readonly<Ref<MusicAccount>>) {
   const entries = ref<SavedMusicLink[]>([])
@@ -12,12 +13,48 @@ export function useMusicLibrary(user: Readonly<Ref<MusicAccount>>) {
   const busy = ref(false)
   const ready = ref(false)
   const expired = ref(false)
-  const disabled = computed(() => !user.value || busy.value || !ready.value || expired.value)
+  const localDev = computed(() => import.meta.env.DEV && !user.value)
+  const available = computed(() => !!user.value || localDev.value)
+  const disabled = computed(() => !available.value || busy.value || !ready.value || expired.value)
   let generation = 0
+  let initialized = false
   let controller: AbortController | undefined
 
+  function loadLocal() {
+    try {
+      const stored: unknown = JSON.parse(localStorage.getItem(devStorageKey) ?? '[]')
+      if (!Array.isArray(stored)) throw new Error('Invalid library')
+      const unique = new Map<string, SavedMusicLink>()
+      for (const entry of stored) {
+        if (!entry || typeof entry.name !== 'string' || typeof entry.url !== 'string') continue
+        const source = parseMusicLink(entry.url)
+        if (!source) continue
+        const url = musicSourceUrl(source)
+        unique.set(url, { url, name: entry.name.trim().slice(0, 80) || 'Saved music' })
+      }
+      entries.value = [...unique.values()]
+      notice.value = ''
+    } catch { notice.value = 'Could not load the local development library. You can still test it for this visit.' }
+    ready.value = true
+  }
+
   async function request(command?: { type: 'save' | 'remove'; url: string; name?: string }) {
-    if (!user.value || busy.value || (command && disabled.value)) return false
+    if (!available.value || busy.value || (command && disabled.value)) return false
+    if (localDev.value) {
+      if (!command) { loadLocal(); return true }
+      const existing = entries.value.find(entry => entry.url === command.url)
+      if (command.type === 'remove') entries.value = entries.value.filter(entry => entry.url !== command.url)
+      else if (existing) { if (command.name) existing.name = command.name }
+      else {
+        const source = parseMusicLink(command.url)!
+        entries.value.push({ url: command.url, name: command.name || `${source.videoId ? 'Song' : 'Playlist'} · ${source.videoId ?? source.playlistId}` })
+      }
+      try {
+        localStorage.setItem(devStorageKey, JSON.stringify(entries.value))
+        notice.value = command.type === 'save' ? 'Saved to your local development library.' : 'Removed from your library.'
+      } catch { notice.value = 'Development library updated for this visit. Browser storage is unavailable, so changes may be lost on reload.' }
+      return true
+    }
     const token = generation
     const current = () => token === generation
     const active = new AbortController()
@@ -67,7 +104,8 @@ export function useMusicLibrary(user: Readonly<Ref<MusicAccount>>) {
   async function remove(url: string) { return request({ type: 'remove', url }) }
 
   watch(user, (nextUser, previousUser) => {
-    if (nextUser?.id === previousUser?.id && !expired.value) return
+    if (initialized && nextUser?.id === previousUser?.id && !expired.value) return
+    initialized = true
     generation++
     controller?.abort()
     entries.value = []
@@ -75,8 +113,8 @@ export function useMusicLibrary(user: Readonly<Ref<MusicAccount>>) {
     ready.value = false
     expired.value = false
     notice.value = ''
-    if (user.value) void request()
+    if (available.value) void request()
   }, { immediate: true, flush: 'sync' })
   onUnmounted(() => { generation++; controller?.abort() })
-  return { entries, notice, busy, ready, expired, disabled, save, remove, reload: () => request() }
+  return { entries, notice, busy, ready, expired, disabled, localDev, available, save, remove, reload: () => request() }
 }

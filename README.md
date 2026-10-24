@@ -105,7 +105,14 @@ a 401; if it still fails, the private list is cleared and sign-in is requested.
 Use **Retry library** if the initial load fails. Library reads/writes use the
 `/.netlify/functions/music-library` function and the
 `20261024120000_music_library.sql` migration. This backend requires Netlify;
-plain Vite only supports guest music playback.
+plain Vite uses a local development library for signed-out testing.
+
+With `pnpm dev`, signed-out users can save, delete, search, and shuffle links
+without signing in or running the backend. This development library persists
+under a separate browser-storage key and makes no library API calls. Signing in
+switches to the account library; signing out restores the local development
+library. The two libraries are never merged automatically. Production builds
+disable this guest library and require sign-in for saved libraries.
 
 This first version is available without a subscription. It does not link Google
 accounts or import a personal Music library. The official YouTube IFrame API
